@@ -1,505 +1,266 @@
 # CodeGraph CLI
 
-<div align="center">
+**Code intelligence from the terminal. Semantic search, impact analysis, multi-agent code generation, and conversational coding — all backed by your choice of LLM.**
 
-**Local-first AI coding assistant with semantic search, impact analysis, and interactive chat**
-
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/yourusername/codegraph-cli)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-
-[Quick Start](#-quick-start) • [Features](#-features) • [Installation](INSTALL.md) • [Examples](EXAMPLES.md) • [FAQ](FAQ.md)
-
-</div>
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/al1-nasir/codegraph-cli)
 
 ---
 
-## 🎯 What is CodeGraph?
+## Overview
 
-CodeGraph CLI is a **fully local, open-source** AI coding assistant that understands your codebase through semantic analysis. Think of it as having an expert developer who knows every line of your code, can predict what breaks before you change it, and helps you code through natural conversation.
+CodeGraph CLI (`cg`) parses your codebase into a semantic graph, then exposes that graph through search, impact analysis, visualization, and a conversational interface. It supports six LLM providers and optionally runs a CrewAI multi-agent system that can read, write, patch, and rollback files autonomously.
 
-**The only coding assistant that understands what breaks before you break it.**
+Core capabilities:
 
----
-
-## ✨ Features
-
-### 🤖 Interactive Chat Mode (NEW!)
-**Conversational coding assistance with smart RAG-based context**
-
-```bash
-cg chat start
-```
-
-- Natural language coding sessions
-- Search, analyze, generate, and refactor through conversation
-- Smart context management (70% fewer tokens than naive approaches)
-- ChromaDB-powered fast retrieval (10-100x faster)
-- Session persistence - resume anytime
-- Preview changes before applying
-
-**Example conversation:**
-```
-You: Find the authentication code
-You: Add a password reset endpoint
-You: /preview
-You: /apply
-```
-
-### 🔍 Semantic Search
-**Find code by meaning, not exact matches**
-
-```bash
-cg search "database writes"
-cg search "payment processing" --top-k 10
-```
-
-- Hash-based embeddings (no heavy ML models)
-- ChromaDB vector store for blazing fast search
-- Filter by node type (function, class, module)
-- Relevance scoring
-
-### 📊 Impact Analysis
-**See what breaks BEFORE you change it**
-
-```bash
-cg impact process_payment --hops 2
-cg impact UserService --hops 3 --llm-provider groq
-```
-
-- Multi-hop dependency traversal
-- AI-powered explanations
-- ASCII dependency graphs
-- Identifies affected tests and integration points
-
-### 🗺️ Dependency Graphs
-**Visualize how your code connects**
-
-```bash
-cg graph UserService --depth 2
-cg export-graph --format html --output graph.html
-cg export-graph MyClass --format dot
-```
-
-- Interactive HTML visualizations
-- Graphviz DOT export
-- Focus on specific symbols
-- Full project or local subgraphs
-
-### 🛠️ Code Generation & Refactoring (v2.0)
-**AI-powered code transformations**
-
-```bash
-# Generate code
-cg v2 generate "Add password reset endpoint"
-
-# Refactor operations
-cg v2 refactor rename-symbol OldName NewName
-cg v2 refactor extract-function process_payment 45 60
-cg v2 refactor extract-service payment_functions
-
-# Code review
-cg v2 review src/auth.py --check-security --check-performance
-
-# Test generation
-cg v2 test unit process_payment
-cg v2 test integration "user registration flow"
-
-# Error fixing
-cg v2 diagnose check src/
-cg v2 diagnose fix src/auth.py
-```
-
-### 🤖 Multi-LLM Support
-**Choose your AI provider**
-
-- **Ollama** (local, private, free) - Default
-- **Groq** (fast, cloud, free tier)
-- **OpenAI** (GPT-4, GPT-3.5)
-- **Anthropic** (Claude)
-
-```bash
-# Configure provider
-export LLM_PROVIDER=groq
-export LLM_API_KEY=your_key_here
-export LLM_MODEL=llama-3.3-70b-versatile
-
-# Or use flags
-cg impact MyClass --llm-provider groq --llm-api-key $GROQ_KEY
-```
-
-### 🔒 Privacy & Performance
-- **100% Local Option** - Works offline with Ollama
-- **Your code never leaves your machine** (with local LLM)
-- **Fast** - Hash-based embeddings, ChromaDB vector store
-- **Persistent Memory** - Index once, query forever
-- **SQLite + ChromaDB** - Lightweight, no database server needed
+- **Semantic Search** — find code by meaning, not string matching
+- **Impact Analysis** — trace multi-hop dependencies before making changes
+- **Graph Visualization** — interactive HTML and Graphviz DOT exports
+- **Conversational Chat** — natural language coding sessions with RAG context
+- **Multi-Agent System** — CrewAI-powered agents for code generation, refactoring, and analysis
+- **File Rollback** — automatic backups before every file modification
 
 ---
 
-## 🚀 Quick Start
-
-### 1. Install
+## Installation
 
 ```bash
 pip install codegraph-cli
 ```
 
-**Optional: Install ChromaDB for 10-100x faster search**
+With CrewAI multi-agent support:
+
 ```bash
-pip install chromadb
+pip install codegraph-cli[crew]
 ```
 
-See [INSTALL.md](INSTALL.md) for detailed instructions and LLM setup.
-
-### 2. Index Your Project
+For development:
 
 ```bash
-cg index /path/to/your/project --name MyProject
-```
-
-This creates a semantic graph of your codebase with:
-- All modules, classes, and functions
-- Dependencies and call relationships
-- Embeddings for semantic search
-- ChromaDB vector store (if installed)
-
-### 3. Start Coding!
-
-#### Interactive Chat
-```bash
-cg chat start
-
-You: Find the authentication code
-Assistant: Found 5 results:
-1. [function] auth.login_endpoint
-   Location: src/auth.py:45
-   Relevance: 0.85
-
-You: Add a password reset endpoint
-Assistant: I've created a code proposal: Add password reset endpoint
-Files to change: 2
-  - New files: 1
-  - Modified files: 1
-
-To apply these changes, say 'apply' or '/apply'.
-
-You: /apply
-Assistant: ✅ Successfully applied changes to 2 file(s).
-```
-
-#### Semantic Search
-```bash
-cg search "database writes"
-# [function] save_user  score=0.823
-#   src/models.py:45-67
-#   def save_user(user_data): ...
-```
-
-#### Impact Analysis
-```bash
-cg impact process_payment --hops 2
-# Root: process_payment
-# Impacted symbols:
-# - checkout_handler
-# - order_service
-# - payment_webhook
-#
-# Explanation:
-# Changing process_payment will affect 3 downstream functions...
-```
-
-#### Dependency Graph
-```bash
-cg graph UserService --depth 2
-# UserService
-# ├── AuthService
-# │   └── TokenManager
-# └── DatabaseService
-#     └── ConnectionPool
+git clone https://github.com/al1-nasir/codegraph-cli.git
+cd codegraph-cli
+pip install -e ".[dev]"
 ```
 
 ---
 
-## 📚 Complete Command Reference
+## Quick Start
+
+### 1. Configure your LLM provider
+
+```bash
+cg setup
+```
+
+This runs an interactive wizard that writes configuration to `~/.codegraph/config.toml`. Alternatively, switch providers directly:
+
+```bash
+cg set-llm openrouter
+cg set-llm groq
+cg set-llm ollama
+```
+
+### 2. Index a project
+
+```bash
+cg index /path/to/project --name myproject
+```
+
+This parses the source tree using tree-sitter, builds a dependency graph in SQLite, and generates embeddings for semantic search.
+
+### 3. Use it
+
+```bash
+cg search "authentication logic"
+cg impact UserService --hops 3
+cg graph process_payment --depth 2
+cg chat start
+cg chat start --crew    # multi-agent mode
+```
+
+---
+
+## Supported LLM Providers
+
+| Provider | Type | Configuration |
+|----------|------|---------------|
+| Ollama | Local, free | `cg set-llm ollama` |
+| Groq | Cloud, free tier | `cg set-llm groq` |
+| OpenAI | Cloud | `cg set-llm openai` |
+| Anthropic | Cloud | `cg set-llm anthropic` |
+| Gemini | Cloud | `cg set-llm gemini` |
+| OpenRouter | Cloud, multi-model | `cg set-llm openrouter` |
+
+All configuration is stored in `~/.codegraph/config.toml`. No environment variables required.
+
+```bash
+cg show-llm        # view current provider, model, and endpoint
+cg unset-llm       # reset to defaults
+```
+
+---
+
+## Commands
 
 ### Project Management
+
 ```bash
-cg index <path> [--name NAME]          # Index a project
-cg list-projects                        # List all indexed projects
-cg load-project <name>                  # Switch active project
-cg current-project                      # Show active project
-cg delete-project <name>                # Delete project index
-cg merge-projects <source> <target>     # Merge two projects
+cg index <path> [--name NAME]       # parse and index a codebase
+cg list-projects                     # list all indexed projects
+cg load-project <name>               # switch active project
+cg current-project                   # print active project name
+cg delete-project <name>             # remove a project index
+cg merge-projects <src> <dst>        # merge two project graphs
+cg unload-project                    # unload without deleting
+```
+
+### Search and Analysis
+
+```bash
+cg search <query> [--top-k N]       # semantic search across the graph
+cg impact <symbol> [--hops N]       # multi-hop dependency impact analysis
+cg graph <symbol> [--depth N]       # ASCII dependency graph
+cg rag-context <query> [--top-k N]  # raw RAG retrieval for debugging
+```
+
+### Graph Export
+
+```bash
+cg export-graph --format html        # interactive vis.js visualization
+cg export-graph --format dot         # Graphviz DOT format
+cg export-graph MyClass -f html -o out.html  # focused subgraph
 ```
 
 ### Interactive Chat
+
 ```bash
-cg chat start                           # Start/resume chat
-cg chat start --new                     # Force new session
-cg chat start --session <id>            # Resume specific session
-cg chat list                            # List all sessions
-cg chat list --project MyProject        # Filter by project
-cg chat delete <session-id>             # Delete a session
+cg chat start                        # start or resume a session
+cg chat start --new                  # force a new session
+cg chat start --crew                 # multi-agent mode (CrewAI)
+cg chat start -s <id>                # resume a specific session
+cg chat list                         # list all sessions
+cg chat delete <id>                  # delete a session
 ```
 
-**In-Chat Commands:**
-- `/exit` - Exit and save session
-- `/help` - Show help
-- `/apply` - Apply pending code proposal
-- `/preview` - Preview pending changes
-- `/clear` - Clear conversation history
+In-chat commands:
 
-### Search & Analysis
-```bash
-cg search <query> [--top-k N]           # Semantic search
-cg impact <symbol> [--hops N]           # Impact analysis
-cg graph <symbol> [--depth N]           # Dependency graph
-cg rag-context <query> [--top-k N]      # Raw RAG context
-```
+| Command | Mode | Description |
+|---------|------|-------------|
+| `/help` | Both | Show available commands |
+| `/clear` | Both | Clear conversation history |
+| `/new` | Both | Start a fresh session |
+| `/exit` | Both | Save and exit |
+| `/apply` | Standard | Apply pending code proposal |
+| `/preview` | Standard | Preview pending file changes |
+| `/backups` | Crew | List all file backups |
+| `/rollback <file>` | Crew | Restore a file from backup |
+| `/undo <file>` | Crew | Alias for rollback |
 
-### Visualization
-```bash
-cg export-graph [--format html|dot]     # Export full graph
-cg export-graph <symbol> [--format]     # Export local subgraph
-cg export-graph --output graph.html     # Custom output path
-```
+### Code Generation (v2)
 
-### Code Generation (v2.0)
 ```bash
-cg v2 generate <prompt>                 # Generate code
-cg v2 generate <prompt> --max-files N   # Limit files changed
-```
-
-### Refactoring (v2.0)
-```bash
-cg v2 refactor rename-symbol <old> <new>
-cg v2 refactor extract-function <symbol> <start> <end>
-cg v2 refactor extract-service <pattern>
-```
-
-### Code Review (v2.0)
-```bash
-cg v2 review <file>                     # Full review
-cg v2 review <file> --check-security    # Security scan
-cg v2 review <file> --check-performance # Performance analysis
-cg v2 review <file> --check-bugs        # Bug detection
-```
-
-### Testing (v2.0)
-```bash
-cg v2 test unit <symbol>                # Generate unit tests
-cg v2 test integration <description>    # Generate integration tests
-cg v2 test coverage <symbol>            # Predict coverage impact
-```
-
-### Diagnostics (v2.0)
-```bash
-cg v2 diagnose check <path>             # Check for errors
-cg v2 diagnose fix <file>               # Auto-fix errors
+cg v2 generate "add a REST endpoint for user deletion"
+cg v2 review src/auth.py --check-security
+cg v2 refactor rename-symbol OldName NewName
+cg v2 refactor extract-function target_fn 45 60
+cg v2 test unit process_payment
+cg v2 diagnose check src/
+cg v2 diagnose fix src/auth.py
+cg v2 rollback <file>
+cg v2 list-backups
 ```
 
 ---
 
-## 💡 Use Cases
+## Multi-Agent System
 
-### 1. Understanding Unfamiliar Code
-```bash
-# "What does this function do?"
-cg search "payment processing"
-cg impact process_payment --hops 2
+When you run `cg chat start --crew`, CodeGraph launches a CrewAI pipeline with four specialized agents:
 
-# Or use chat
-cg chat start
-You: What does process_payment do?
+| Agent | Role | Tools |
+|-------|------|-------|
+| Project Coordinator | Routes tasks to the right specialist | Delegation only |
+| File System Engineer | File I/O, directory traversal, backups | list_directory, read_file, write_file, patch_file, delete_file, rollback_file, file_tree |
+| Senior Software Developer | Code generation, refactoring, bug fixes | All tools (file ops + code analysis) |
+| Code Intelligence Analyst | Search, dependency tracing, explanations | search_code, grep, project_summary, read_file |
+
+Every file modification automatically creates a timestamped backup in `~/.codegraph/backups/`. Files can be rolled back to any previous state via `/rollback` or `cg v2 rollback`.
+
+---
+
+## Architecture
+
+```
+CLI Layer (Typer)
+    |
+    +-- MCPOrchestrator ----------> GraphStore (SQLite)
+    |       |                           |
+    |       +-- Parser (tree-sitter)    +-- VectorStore (LanceDB)
+    |       +-- RAGRetriever            |
+    |       +-- LLM Adapter             +-- Embeddings
+    |
+    +-- ChatAgent (standard mode)
+    |
+    +-- CrewChatAgent (--crew mode)
+            |
+            +-- Coordinator Agent
+            +-- File System Agent -----> 8 file operation tools
+            +-- Code Gen Agent --------> all 11 tools
+            +-- Code Analysis Agent ---> 3 search/analysis tools
 ```
 
-### 2. Safe Refactoring
-```bash
-# Before changing anything
-cg impact UserService --hops 3
+**Parser**: tree-sitter grammars for Python, JavaScript, and TypeScript. Extracts modules, classes, functions, imports, and call relationships into a directed graph.
 
-# See what breaks
-# Root: UserService
-# Impacted: AuthController, ProfileView, AdminDashboard
+**Storage**: SQLite for the code graph (nodes + edges), LanceDB for vector embeddings. All data stored under `~/.codegraph/`.
 
-# Now refactor safely
-cg v2 refactor rename-symbol UserService UserManager
+**LLM Adapter**: Unified interface across six providers. For CrewAI, models are routed through LiteLLM. Configuration is read exclusively from `~/.codegraph/config.toml`.
+
+---
+
+## Project Structure
+
 ```
-
-### 3. Code Review
-```bash
-# Review a pull request
-cg v2 review src/new_feature.py --check-security --check-bugs
-
-# Or in chat
-You: Review the authentication changes
-You: Are there any security issues?
-```
-
-### 4. Feature Development
-```bash
-# Interactive development
-cg chat start
-
-You: Add a password reset endpoint
-Assistant: [Creates proposal]
-
-You: /preview
-Assistant: [Shows diff]
-
-You: /apply
-Assistant: ✅ Applied changes
-```
-
-### 5. Finding Dead Code
-```bash
-# Find unused functions
-cg search "legacy" --top-k 20
-cg impact old_function --hops 1
-
-# If no impacted symbols → safe to delete
+codegraph_cli/
+    cli.py               # main Typer application, all top-level commands
+    cli_chat.py           # interactive chat REPL with styled output
+    cli_setup.py          # setup wizard, set-llm, unset-llm, show-llm
+    cli_v2.py             # v2 code generation commands
+    config.py             # loads config from TOML
+    config_manager.py     # TOML read/write, provider validation
+    llm.py                # multi-provider LLM adapter
+    parser.py             # tree-sitter AST parsing
+    storage.py            # SQLite graph store
+    embeddings.py         # hash-based embedding model
+    rag.py                # RAG retriever
+    vector_store.py       # LanceDB vector store
+    orchestrator.py       # coordinates parsing, search, impact
+    graph_export.py       # DOT and HTML export
+    project_context.py    # unified file access layer
+    crew_tools.py         # 11 CrewAI tools (file ops + analysis)
+    crew_agents.py        # 4 specialized CrewAI agents
+    crew_chat.py          # CrewAI orchestrator with rollback
+    chat_agent.py         # standard chat agent
+    chat_session.py       # session persistence
+    models.py             # core data models
+    models_v2.py          # v2 models (ChatSession, CodeProposal)
+    templates/
+        graph_interactive.html  # vis.js graph template
 ```
 
 ---
 
-## 🏗️ Architecture
-
-CodeGraph uses a **multi-agent architecture**:
-
-```
-┌─────────────────────────────────────────┐
-│         CLI Interface                    │
-│  (Typer-based commands + Chat REPL)     │
-└──────────────┬──────────────────────────┘
-               │
-┌──────────────▼──────────────────────────┐
-│      MCPOrchestrator                     │
-│  (Coordinates all agents)                │
-└──┬───────┬──────────┬──────────┬────────┘
-   │       │          │          │
-┌──▼──┐ ┌─▼───┐  ┌───▼───┐  ┌──▼─────┐
-│Graph│ │ RAG │  │Codegen│  │Refactor│
-│Agent│ │Agent│  │ Agent │  │ Agent  │
-└──┬──┘ └─┬───┘  └───┬───┘  └──┬─────┘
-   │      │          │         │
-┌──▼──────▼──────────▼─────────▼────────┐
-│         GraphStore (SQLite)            │
-│  + VectorStore (ChromaDB - optional)   │
-└────────────────────────────────────────┘
-```
-
-**Key Components:**
-- **Parser** - AST-based code analysis (Python, JS, TS, Go, Java, C++)
-- **GraphStore** - SQLite for code graph + ChromaDB for vectors
-- **Embeddings** - Fast hash-based semantic embeddings
-- **RAGAgent** - Semantic search with ChromaDB (10-100x faster)
-- **ChatAgent** - Smart context management with RAG
-- **CodeGenAgent** - AI-powered code generation
-- **RefactorAgent** - Safe code transformations
-
-See [docs/architecture.md](docs/architecture.md) for details.
-
----
-
-## 🔧 Configuration
-
-### Environment Variables
+## Development
 
 ```bash
-# LLM Provider (default: ollama)
-export LLM_PROVIDER=groq              # ollama, groq, openai, anthropic
-export LLM_MODEL=llama-3.3-70b-versatile
-export LLM_API_KEY=your_key_here
-export LLM_ENDPOINT=http://localhost:11434/api/generate  # For Ollama
-
-# Storage (default: ~/.codegraph/)
-export CODEGRAPH_HOME=/custom/path
-```
-
-### LLM Provider Setup
-
-**Ollama (Local, Free)**
-```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull a model
-ollama pull qwen2.5-coder:7b
-
-# Use with CodeGraph
-export LLM_PROVIDER=ollama
-```
-
-**Groq (Cloud, Fast, Free Tier)**
-```bash
-# Get API key from https://console.groq.com
-export LLM_PROVIDER=groq
-export LLM_API_KEY=gsk_...
-export LLM_MODEL=llama-3.3-70b-versatile
-```
-
-**OpenAI**
-```bash
-export LLM_PROVIDER=openai
-export LLM_API_KEY=sk-...
-export LLM_MODEL=gpt-4
-```
-
-**Anthropic**
-```bash
-export LLM_PROVIDER=anthropic
-export LLM_API_KEY=sk-ant-...
-export LLM_MODEL=claude-3-5-sonnet-20241022
+git clone https://github.com/al1-nasir/codegraph-cli.git
+cd codegraph-cli
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev,crew]"
+pytest
 ```
 
 ---
 
-## 📖 Documentation
+## License
 
-- **[INSTALL.md](INSTALL.md)** - Installation guide with LLM setup
-- **[QUICKSTART.md](QUICKSTART.md)** - 5-minute tutorial
-- **[EXAMPLES.md](EXAMPLES.md)** - Real-world use cases
-- **[FAQ.md](FAQ.md)** - Common questions and troubleshooting
-- **[docs/architecture.md](docs/architecture.md)** - Technical architecture
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guide
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-**Areas we'd love help with:**
-- Additional language parsers (Rust, Ruby, PHP, etc.)
-- UI improvements for graph visualization
-- Performance optimizations
-- Documentation and examples
-- Bug reports and feature requests
-
----
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-Built with:
-- [Tree-sitter](https://tree-sitter.github.io/) for parsing
-- [ChromaDB](https://www.trychroma.com/) for vector storage
-- [Typer](https://typer.tiangolo.com/) for CLI
-- [Ollama](https://ollama.com/), [Groq](https://groq.com/), [OpenAI](https://openai.com/), [Anthropic](https://anthropic.com/) for LLMs
-
----
-
-<div align="center">
-
-**Made with ❤️ for developers who care about code quality**
-
-[⭐ Star us on GitHub](https://github.com/yourusername/codegraph-cli) • [🐛 Report a bug](https://github.com/yourusername/codegraph-cli/issues) • [💡 Request a feature](https://github.com/yourusername/codegraph-cli/issues)
-
-</div>
+MIT. See [LICENSE](LICENSE).

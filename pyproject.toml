@@ -46,11 +46,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ali-nasir-ali/codegraph-cli"
-Documentation = "https://github.com/ali-nasir-ali/codegraph-cli#readme"
-Repository = "https://github.com/ali-nasir-ali/codegraph-cli"
-Issues = "https://github.com/ali-nasir-ali/codegraph-cli/issues"
-Changelog = "https://github.com/ali-nasir-ali/codegraph-cli/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/al1-nasir/codegraph-cli"
+Documentation = "https://github.com/al1-nasir/codegraph-cli#readme"
+Repository = "https://github.com/al1-nasir/codegraph-cli"
+Issues = "https://github.com/al1-nasir/codegraph-cli/issues"
+Changelog = "https://github.com/al1-nasir/codegraph-cli/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 crew = [
