@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>CodeGraph Interactive Visualization</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        #header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+
+        #stats {
+            color: #666;
+            font-size: 14px;
+        }
+
+        #graph {
+            width: 100%;
+            height: 700px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #legend {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .legend-item {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 10px;
+        }
+
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        #info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="header">
+        <h1>🔍 CodeGraph Interactive Visualization</h1>
+        <div id="stats"></div>
+    </div>
+
+    <div id="graph"></div>
+
+    <div id="legend">
+        <strong>Legend:</strong>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #4A90E2;"></span>
+            <span>Module</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #7ED321;"></span>
+            <span>Class</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #F5A623;"></span>
+            <span>Function</span>
+        </div>
+        <div class="legend-item">
+            <span style="color: #999; margin-right: 8px;">━━━</span>
+            <span>Contains</span>
+        </div>
+        <div class="legend-item">
+            <span style="color: #E74C3C; margin-right: 8px;">━━━▶</span>
+            <span>Calls</span>
+        </div>
+        <div class="legend-item">
+            <span style="color: #9B59B6; margin-right: 8px;">- - -▶</span>
+            <span>Depends On</span>
+        </div>
+    </div>
+
+    <div id="info"></div>
+
+    <script type="text/javascript">
+        // Graph data will be injected here
+        const graphData = {{ GRAPH_DATA }};
+
+        // Transform nodes
+        const nodes = graphData.nodes.map(node => {
+            let color = '#4A90E2'; // Module
+            let shape = 'box';
+
+            if (node.id.startsWith('class:')) {
+                color = '#7ED321'; // Class
+                shape = 'ellipse';
+            } else if (node.id.startsWith('function:')) {
+                color = '#F5A623'; // Function
+                shape = 'box';
+            }
+
+            return {
+                id: node.id,
+                label: node.label.split(':')[1] || node.label,
+                title: `${node.label}\n${node.title}`,
+                color: {
+                    background: color,
+                    border: color,
+                    highlight: {
+                        background: color,
+                        border: '#333'
+                    }
+                },
+                shape: shape,
+                font: {
+                    color: 'white',
+                    size: 14
+                }
+            };
+        });
+
+        // Transform edges
+        const edges = graphData.edges.map(edge => {
+            let color = '#999';
+            let dashes = false;
+            let arrows = '';
+
+            if (edge.edge_type === 'calls') {
+                color = '#E74C3C';
+                arrows = 'to';
+            } else if (edge.edge_type === 'depends_on') {
+                color = '#9B59B6';
+                dashes = true;
+                arrows = 'to';
+            } else if (edge.edge_type === 'contains') {
+                color = '#999';
+                arrows = '';
+            }
+
+            return {
+                from: edge.src,
+                to: edge.dst,
+                color: color,
+                dashes: dashes,
+                arrows: arrows,
+                title: edge.edge_type
+            };
+        });
+
+        // Update stats
+        const callEdges = graphData.edges.filter(e => e.edge_type === 'calls').length;
+        const containsEdges = graphData.edges.filter(e => e.edge_type === 'contains').length;
+        const dependsEdges = graphData.edges.filter(e => e.edge_type === 'depends_on').length;
+
+        document.getElementById('stats').innerHTML = `
+            <strong>${nodes.length}</strong> nodes | 
+            <strong>${edges.length}</strong> edges 
+            (<strong>${callEdges}</strong> calls, 
+            <strong>${containsEdges}</strong> contains, 
+            <strong>${dependsEdges}</strong> dependencies)
+        `;
+
+        // Create network
+        const container = document.getElementById('graph');
+        const data = {
+            nodes: new vis.DataSet(nodes),
+            edges: new vis.DataSet(edges)
+        };
+
+        const options = {
+            physics: {
+                enabled: true,
+                barnesHut: {
+                    gravitationalConstant: -8000,
+                    centralGravity: 0.3,
+                    springLength: 150,
+                    springConstant: 0.04
+                },
+                stabilization: {
+                    iterations: 200
+                }
+            },
+            interaction: {
+                hover: true,
+                tooltipDelay: 100,
+                zoomView: true,
+                dragView: true
+            },
+            layout: {
+                hierarchical: {
+                    enabled: false
+                }
+            }
+        };
+
+        const network = new vis.Network(container, data, options);
+
+        // Click handler
+        network.on('click', function (params) {
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                const node = graphData.nodes.find(n => n.id === nodeId);
+
+                if (node) {
+                    const infoDiv = document.getElementById('info');
+                    infoDiv.style.display = 'block';
+                    infoDiv.innerHTML = `
+                        <h3>${node.label}</h3>
+                        <p><strong>Type:</strong> ${node.id.split(':')[0]}</p>
+                        <p><strong>File:</strong> ${node.title}</p>
+                    `;
+                }
+            }
+        });
+
+        // Stabilization progress
+        network.on('stabilizationProgress', function (params) {
+            const progress = Math.round((params.iterations / params.total) * 100);
+            document.getElementById('stats').innerHTML += ` | Rendering: ${progress}%`;
+        });
+
+        network.on('stabilizationIterationsDone', function () {
+            document.getElementById('stats').innerHTML = document.getElementById('stats').innerHTML.replace(/\| Rendering: \d+%/, '');
+        });
+    </script>
+</body>
+
+</html>
