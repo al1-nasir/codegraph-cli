@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/al1-nasir/codegraph-cli)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/al1-nasir/codegraph-cli)
 
 ---
 
@@ -29,10 +29,22 @@ Core capabilities:
 pip install codegraph-cli
 ```
 
+With neural embedding models (semantic code search):
+
+```bash
+pip install codegraph-cli[embeddings]
+```
+
 With CrewAI multi-agent support:
 
 ```bash
 pip install codegraph-cli[crew]
+```
+
+Everything:
+
+```bash
+pip install codegraph-cli[all]
 ```
 
 For development:
@@ -97,6 +109,34 @@ All configuration is stored in `~/.codegraph/config.toml`. No environment variab
 ```bash
 cg show-llm        # view current provider, model, and endpoint
 cg unset-llm       # reset to defaults
+```
+
+---
+
+## Embedding Models
+
+CodeGraph supports configurable embedding models for semantic code search. Choose based on your hardware and quality needs:
+
+| Model | Download | Dim | Quality | Command |
+|-------|----------|-----|---------|---------|
+| hash | 0 bytes | 256 | Keyword-only | `cg set-embedding hash` |
+| minilm | ~80 MB | 384 | Decent | `cg set-embedding minilm` |
+| bge-base | ~440 MB | 768 | Good | `cg set-embedding bge-base` |
+| jina-code | ~550 MB | 768 | Code-aware | `cg set-embedding jina-code` |
+| qodo-1.5b | ~6.2 GB | 1536 | Best | `cg set-embedding qodo-1.5b` |
+
+The default is `hash` (zero-dependency, no download). Neural models require the `[embeddings]` extra and are downloaded on first use from HuggingFace.
+
+```bash
+cg set-embedding jina-code    # switch to a neural model
+cg show-embedding             # view current model and all options
+cg unset-embedding            # reset to hash default
+```
+
+After changing the embedding model, re-index your project:
+
+```bash
+cg index /path/to/project
 ```
 
 ---
@@ -197,8 +237,9 @@ CLI Layer (Typer)
     |       |                           |
     |       +-- Parser (tree-sitter)    +-- VectorStore (LanceDB)
     |       +-- RAGRetriever            |
-    |       +-- LLM Adapter             +-- Embeddings
-    |
+    |       +-- LLM Adapter             +-- Embeddings (configurable)
+    |                                       hash | minilm | bge-base
+    |                                       jina-code | qodo-1.5b
     +-- ChatAgent (standard mode)
     |
     +-- CrewChatAgent (--crew mode)
@@ -208,6 +249,8 @@ CLI Layer (Typer)
             +-- Code Gen Agent --------> all 11 tools
             +-- Code Analysis Agent ---> 3 search/analysis tools
 ```
+
+**Embeddings**: Five models available via `cg set-embedding`. Hash (default, zero-dependency) through Qodo-Embed-1-1.5B (best quality, 6 GB). Neural models use raw `transformers` + `torch` — no sentence-transformers overhead. Models are cached in `~/.codegraph/models/`.
 
 **Parser**: tree-sitter grammars for Python, JavaScript, and TypeScript. Extracts modules, classes, functions, imports, and call relationships into a directed graph.
 
@@ -223,14 +266,14 @@ CLI Layer (Typer)
 codegraph_cli/
     cli.py               # main Typer application, all top-level commands
     cli_chat.py           # interactive chat REPL with styled output
-    cli_setup.py          # setup wizard, set-llm, unset-llm, show-llm
+    cli_setup.py          # setup wizard, set-llm, unset-llm, set-embedding
     cli_v2.py             # v2 code generation commands
     config.py             # loads config from TOML
-    config_manager.py     # TOML read/write, provider validation
+    config_manager.py     # TOML read/write, provider and embedding config
     llm.py                # multi-provider LLM adapter
     parser.py             # tree-sitter AST parsing
     storage.py            # SQLite graph store
-    embeddings.py         # hash-based embedding model
+    embeddings.py         # configurable embedding engine (5 models)
     rag.py                # RAG retriever
     vector_store.py       # LanceDB vector store
     orchestrator.py       # coordinates parsing, search, impact
@@ -255,7 +298,7 @@ codegraph_cli/
 git clone https://github.com/al1-nasir/codegraph-cli.git
 cd codegraph-cli
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev,crew]"
+pip install -e ".[dev,crew,embeddings]"
 pytest
 ```
 
