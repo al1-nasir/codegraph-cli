@@ -11,7 +11,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from .embeddings import HashEmbeddingModel, NeuralEmbedder, cosine_similarity
+from .embeddings import HashEmbeddingModel, TransformerEmbedder, cosine_similarity
 from .models import SearchResult
 from .storage import GraphStore
 
@@ -29,14 +29,14 @@ class RAGRetriever:
        cosine similarity in Python.
 
     The ``embedding_model`` argument accepts either a
-    :class:`~codegraph_cli.embeddings.NeuralEmbedder` or the legacy
+    :class:`~codegraph_cli.embeddings.TransformerEmbedder` or the lightweight
     :class:`~codegraph_cli.embeddings.HashEmbeddingModel`.
     """
 
     def __init__(
         self,
         store: GraphStore,
-        embedding_model: Union[NeuralEmbedder, HashEmbeddingModel, Any],
+        embedding_model: Union[TransformerEmbedder, HashEmbeddingModel, Any],
     ) -> None:
         self.store = store
         self.embedding_model = embedding_model

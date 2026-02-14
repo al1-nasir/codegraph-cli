@@ -8,6 +8,7 @@ from typing import Optional
 import typer
 
 from . import config_manager
+from .embeddings import EMBEDDING_MODELS
 
 app = typer.Typer(help="Setup wizard for LLM provider configuration")
 
@@ -287,6 +288,12 @@ def setup():
         print_error("Failed to save configuration!")
         raise typer.Exit(code=1)
 
+    # Offer embedding setup
+    typer.echo("")
+    setup_emb = typer.confirm("Configure embedding model for semantic search?", default=True)
+    if setup_emb:
+        _interactive_embedding_setup()
+
 
 def set_llm(
     provider: str = typer.Argument(..., help="LLM provider: ollama, groq, openai, anthropic, gemini, openrouter"),
@@ -463,6 +470,157 @@ def show_llm():
     typer.echo(f"  {typer.style('cg setup', fg=typer.colors.YELLOW)}              Full interactive wizard")
     typer.echo(f"  {typer.style('cg set-llm <name>', fg=typer.colors.YELLOW)}     Quick switch provider")
     typer.echo(f"  {typer.style('cg unset-llm', fg=typer.colors.YELLOW)}          Reset / clear config")
+    typer.echo("")
+
+
+# ===================================================================
+# Embedding model commands
+# ===================================================================
+
+def _interactive_embedding_setup():
+    """Interactive embedding model picker (called from setup wizard)."""
+    typer.echo("")
+    typer.echo(typer.style("╭──────────────────────────────────────────────╮", fg=typer.colors.CYAN))
+    typer.echo(typer.style("│", fg=typer.colors.CYAN) + typer.style("   Embedding Model Setup                       ", bold=True) + typer.style("│", fg=typer.colors.CYAN))
+    typer.echo(typer.style("╰──────────────────────────────────────────────╯", fg=typer.colors.CYAN))
+    typer.echo("")
+    typer.echo("Choose an embedding model for semantic code search:")
+    typer.echo("Larger models give better results but need more disk/RAM.\n")
+
+    # List models with numbers
+    model_keys = list(EMBEDDING_MODELS.keys())
+    for i, key in enumerate(model_keys, 1):
+        spec = EMBEDDING_MODELS[key]
+        name_col = f"{key}".ljust(12)
+        size_col = f"({spec['size']})".ljust(14)
+        desc = spec["description"]
+        typer.echo(f"  {i}) {name_col} {size_col} {desc}")
+
+    typer.echo("")
+
+    while True:
+        choice = typer.prompt(f"Enter choice [1-{len(model_keys)}]", type=str)
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(model_keys):
+                selected = model_keys[idx - 1]
+                break
+        except ValueError:
+            # Accept model key directly
+            if choice.strip() in model_keys:
+                selected = choice.strip()
+                break
+        print_error(f"Invalid choice. Enter 1-{len(model_keys)} or a model key.")
+
+    spec = EMBEDDING_MODELS[selected]
+
+    if selected != "hash":
+        typer.echo(f"\n  Model:    {typer.style(spec['name'], fg=typer.colors.CYAN)}")
+        typer.echo(f"  Download: {typer.style(spec['size'], fg=typer.colors.YELLOW)}")
+        typer.echo(f"  Dim:      {spec['dim']}")
+        print_info("Requires: pip install codegraph-cli[embeddings]")
+    else:
+        typer.echo(f"\n  Model: {typer.style('Hash Embedding (zero-dependency)', fg=typer.colors.CYAN)}")
+        print_info("No download needed, but no semantic understanding.")
+
+    success = config_manager.save_embedding_config(selected)
+    if success:
+        print_success(f"Embedding model set to: {selected}")
+        if selected != "hash":
+            print_info(f"Model will be downloaded on first use (~{spec['size']}).")
+            print_info("Re-index your project after changing embeddings: cg index <path>")
+    else:
+        print_error("Failed to save embedding config!")
+
+
+def set_embedding(
+    model: str = typer.Argument(
+        ...,
+        help="Embedding model key: qodo-1.5b, jina-code, bge-base, minilm, hash",
+    ),
+):
+    """Set the embedding model for semantic code search.
+
+    Available models (smallest to largest):
+
+        hash        0 bytes    No download, keyword-level only
+        minilm      ~80 MB     Tiny, fast, decent quality
+        bge-base    ~440 MB    Solid general-purpose
+        jina-code   ~550 MB    Code-aware, good quality
+        qodo-1.5b   ~6.2 GB   Best quality, code-optimized
+
+    Examples:
+        cg set-embedding minilm
+        cg set-embedding jina-code
+        cg set-embedding hash
+    """
+    model = model.lower().strip()
+
+    if model not in EMBEDDING_MODELS:
+        print_error(
+            f"Unknown model '{model}'. "
+            f"Choose from: {', '.join(EMBEDDING_MODELS.keys())}"
+        )
+        raise typer.Exit(code=1)
+
+    spec = EMBEDDING_MODELS[model]
+    success = config_manager.save_embedding_config(model)
+
+    if success:
+        print_success(f"Embedding model set to: {model}")
+        typer.echo(f"  Name: {typer.style(spec['name'], fg=typer.colors.CYAN)}")
+        typer.echo(f"  Dim:  {spec['dim']}")
+        if model != "hash":
+            typer.echo(f"  Size: {spec['size']} (downloaded on first use)")
+            print_info("Re-index your project after changing: cg index <path>")
+    else:
+        print_error("Failed to save configuration!")
+        raise typer.Exit(code=1)
+
+
+def unset_embedding():
+    """Reset embedding model to default (hash — no download)."""
+    success = config_manager.clear_embedding_config()
+    if success:
+        print_success("Embedding model reset to default (hash).")
+        print_info("No neural model will be used. Re-index to apply.")
+    else:
+        print_error("Failed to reset embedding config!")
+        raise typer.Exit(code=1)
+
+
+def show_embedding():
+    """Show current embedding model configuration."""
+    typer.echo("")
+    typer.echo(typer.style("╭──────────────────────────────────────────────╮", fg=typer.colors.CYAN))
+    typer.echo(typer.style("│", fg=typer.colors.CYAN) + typer.style("   Embedding Configuration                     ", bold=True) + typer.style("│", fg=typer.colors.CYAN))
+    typer.echo(typer.style("╰──────────────────────────────────────────────╯", fg=typer.colors.CYAN))
+
+    emb_cfg = config_manager.load_embedding_config()
+    current_key = emb_cfg.get("model", "hash")
+    spec = EMBEDDING_MODELS.get(current_key)
+
+    if spec is None:
+        typer.echo(f"  Model   {typer.style(current_key, fg=typer.colors.RED)} (unknown)")
+    else:
+        typer.echo(f"  Model   {typer.style(f' {current_key} ', bg=typer.colors.CYAN, fg=typer.colors.WHITE, bold=True)}")
+        typer.echo(f"  Name    {typer.style(spec['name'], bold=True)}")
+        typer.echo(f"  Dim     {spec['dim']}")
+        typer.echo(f"  Size    {spec['size']}")
+        typer.echo(f"  Desc    {spec['description']}")
+
+    typer.echo("")
+    typer.echo(typer.style("  Available Models", bold=True))
+    typer.echo(typer.style("  ─────────────────────────────────────────", dim=True))
+    for key, s in EMBEDDING_MODELS.items():
+        marker = typer.style(" *", fg=typer.colors.GREEN) if key == current_key else "  "
+        typer.echo(f"  {marker} {key.ljust(12)} {s['size'].ljust(12)} {s['description']}")
+
+    typer.echo("")
+    typer.echo(typer.style("  Quick Commands", bold=True))
+    typer.echo(typer.style("  ─────────────────────────────────────────", dim=True))
+    typer.echo(f"  {typer.style('cg set-embedding <model>', fg=typer.colors.YELLOW)}   Switch model")
+    typer.echo(f"  {typer.style('cg unset-embedding', fg=typer.colors.YELLOW)}         Reset to hash")
     typer.echo("")
 
 

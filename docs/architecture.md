@@ -166,10 +166,9 @@ vector = normalize(vector)
 similarity = dot(vector_a, vector_b)  # Range: -1 to 1
 ```
 
-**Alternative Implementations** (future enhancements):
-- **CodeBERT**: Pre-trained transformer for code
-- **Sentence-Transformers**: Better semantic understanding
-- **FAISS**: Faster similarity search for large graphs
+**Embedding Models**:
+- **Qodo-Embed-1-1.5B**: Code-specialized transformer (1536-dim, via `transformers` library)
+- **Hash Embeddings**: Zero-dependency fallback for base installs (256-dim)
 
 ---
 

@@ -13,16 +13,21 @@ SUPPORTED_EXTENSIONS = {".py"}
 
 # Load configuration from TOML file (if available)
 try:
-    from .config_manager import load_config
+    from .config_manager import load_config, load_embedding_config
     _toml_config = load_config()
+    _emb_config = load_embedding_config()
 except ImportError:
     _toml_config = {}
+    _emb_config = {}
 
 # LLM Provider Configuration — loaded from ~/.codegraph/config.toml (set via `cg setup` or `cg set-llm`)
 LLM_PROVIDER = _toml_config.get("provider", "ollama")
 LLM_API_KEY = _toml_config.get("api_key", "")
 LLM_MODEL = _toml_config.get("model", "qwen2.5-coder:7b")
 LLM_ENDPOINT = _toml_config.get("endpoint", "http://127.0.0.1:11434/api/generate")
+
+# Embedding model — set via `cg set-embedding` (default: "hash" = no download)
+EMBEDDING_MODEL = _emb_config.get("model", "hash")
 
 
 def ensure_base_dirs() -> None:

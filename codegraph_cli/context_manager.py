@@ -56,7 +56,7 @@ class RepoMap:
           class: PythonGraphParser
           function: _resolve_call_edges
         codegraph_cli/embeddings.py
-          class: NeuralEmbedder
+          class: TransformerEmbedder
           class: HashEmbeddingModel
           function: get_embedder
           function: cosine_similarity

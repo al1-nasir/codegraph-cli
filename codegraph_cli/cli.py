@@ -10,6 +10,7 @@ import typer
 from . import __version__, config
 from .cli_chat import chat_app
 from .cli_setup import setup as setup_wizard, set_llm, unset_llm, show_llm
+from .cli_setup import set_embedding, unset_embedding, show_embedding
 from .cli_v2 import v2_app
 from .graph_export import export_dot, export_html
 from .orchestrator import MCPOrchestrator
@@ -34,6 +35,11 @@ app.command("setup")(setup_wizard)
 app.command("set-llm")(set_llm)
 app.command("unset-llm")(unset_llm)
 app.command("show-llm")(show_llm)
+
+# Register embedding management commands
+app.command("set-embedding")(set_embedding)
+app.command("unset-embedding")(unset_embedding)
+app.command("show-embedding")(show_embedding)
 
 
 def version_callback(value: bool):

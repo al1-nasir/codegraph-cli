@@ -281,7 +281,7 @@ def start_chat(
     new_session: bool = typer.Option(False, "--new", "-n", help="Force start a new session"),
 ):
     """Start interactive chat session."""
-    from .embeddings import HashEmbeddingModel
+    from .embeddings import get_embedder
     from .project_context import ProjectContext
     
     pm = ProjectManager()
@@ -294,7 +294,7 @@ def start_chat(
     
     # Initialize components
     context = ProjectContext(project, pm)
-    embedding_model = HashEmbeddingModel()
+    embedding_model = get_embedder()
     llm = LocalLLM(model=llm_model, provider=llm_provider, api_key=llm_api_key, endpoint=llm_endpoint)
     rag_retriever = RAGRetriever(context.store, embedding_model)
     

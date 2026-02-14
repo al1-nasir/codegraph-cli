@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from .agents import GraphAgent, RAGAgent, SummarizationAgent
-from .embeddings import HashEmbeddingModel
+from .embeddings import get_embedder
 from .llm import LocalLLM
 from .models import ImpactReport, SearchResult
 from .rag import RAGRetriever
@@ -25,7 +25,7 @@ class MCPOrchestrator:
         llm_endpoint: str | None = None,
     ):
         self.store = store
-        self.embedding_model = HashEmbeddingModel()
+        self.embedding_model = get_embedder()
         self.graph_agent = GraphAgent(store, self.embedding_model)
         self.rag_agent = RAGAgent(RAGRetriever(store, self.embedding_model))
         self.summarization_agent = SummarizationAgent(

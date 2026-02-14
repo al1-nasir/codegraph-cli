@@ -6,7 +6,7 @@ from collections import deque
 from pathlib import Path
 from typing import Dict, List, Set
 
-from .embeddings import HashEmbeddingModel
+from .embeddings import HashEmbeddingModel, TransformerEmbedder
 from .llm import LocalLLM
 from .models import ImpactReport
 from .parser import PythonGraphParser

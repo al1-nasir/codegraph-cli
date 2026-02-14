@@ -78,11 +78,37 @@ def load_config() -> Dict[str, Any]:
         return DEFAULT_CONFIGS["ollama"].copy()
 
 
+def load_full_config() -> Dict[str, Any]:
+    """Load the entire TOML config (all sections)."""
+    if not CONFIG_FILE.exists() or toml is None:
+        return {}
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return toml.load(f)
+    except Exception:
+        return {}
+
+
+def _save_full_config(config: Dict[str, Any]) -> bool:
+    """Write entire config dict to TOML file, preserving all sections."""
+    if toml is None:
+        return False
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            toml.dump(config, f)
+        return True
+    except Exception:
+        return False
+
+
 def save_config(provider: str, model: str, api_key: str = "", endpoint: str = "") -> bool:
     """Save LLM configuration to TOML file.
     
+    Preserves other sections (e.g. ``[embeddings]``) in the file.
+    
     Args:
-        provider: Provider name (ollama, groq, openai, anthropic)
+        provider: Provider name (ollama, groq, openai, anthropic, gemini, openrouter)
         model: Model name
         api_key: API key for cloud providers
         endpoint: Custom endpoint (for Ollama)
@@ -90,32 +116,56 @@ def save_config(provider: str, model: str, api_key: str = "", endpoint: str = ""
     Returns:
         True if saved successfully, False otherwise
     """
-    if toml is None:
-        return False
+    config = load_full_config()
     
-    # Ensure directory exists
-    BASE_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # Build config
-    config = {
-        "llm": {
-            "provider": provider,
-            "model": model,
-        }
+    config["llm"] = {
+        "provider": provider,
+        "model": model,
     }
-    
     if api_key:
         config["llm"]["api_key"] = api_key
-    
     if endpoint:
         config["llm"]["endpoint"] = endpoint
     
-    try:
-        with open(CONFIG_FILE, "w") as f:
-            toml.dump(config, f)
-        return True
-    except Exception:
-        return False
+    return _save_full_config(config)
+
+
+# ------------------------------------------------------------------
+# Embedding configuration
+# ------------------------------------------------------------------
+
+def load_embedding_config() -> Dict[str, Any]:
+    """Load embedding configuration from ``[embeddings]`` section.
+    
+    Returns:
+        Dict with at least ``model`` key, or empty dict.
+    """
+    full = load_full_config()
+    return full.get("embeddings", {})
+
+
+def save_embedding_config(model_key: str) -> bool:
+    """Save embedding model choice to config TOML.
+    
+    Preserves ``[llm]`` and other sections.
+    
+    Args:
+        model_key: One of the keys from ``EMBEDDING_MODELS``
+                   (e.g. ``"minilm"``, ``"jina-code"``, ``"hash"``).
+    
+    Returns:
+        True if saved successfully.
+    """
+    config = load_full_config()
+    config["embeddings"] = {"model": model_key}
+    return _save_full_config(config)
+
+
+def clear_embedding_config() -> bool:
+    """Remove ``[embeddings]`` section from config, resetting to default."""
+    config = load_full_config()
+    config.pop("embeddings", None)
+    return _save_full_config(config)
 
 
 def get_provider_config(provider: str) -> Dict[str, Any]:
