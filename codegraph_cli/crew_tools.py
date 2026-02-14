@@ -9,7 +9,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 
-from crewai.tools import BaseTool
+try:
+    from crewai.tools import BaseTool
+    CREWAI_AVAILABLE = True
+except ImportError:
+    # Provide a dummy base class so the module can still be imported
+    class BaseTool:  # type: ignore
+        def __init_subclass__(cls, **kwargs): pass
+        def __init__(self, **kwargs): pass
+    CREWAI_AVAILABLE = False
 from pydantic import BaseModel, Field, PrivateAttr
 
 if TYPE_CHECKING:

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List
 
-from crewai import Agent
+try:
+    from crewai import Agent
+    CREWAI_AVAILABLE = True
+except ImportError:
+    Agent = None  # type: ignore
+    CREWAI_AVAILABLE = False
 
 if TYPE_CHECKING:
     from .crew_tools import create_tools

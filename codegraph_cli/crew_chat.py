@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Dict, List
 
 from datetime import datetime
 
-from crewai import Agent, Crew, Task
+try:
+    from crewai import Agent, Crew, Task
+    CREWAI_AVAILABLE = True
+except ImportError:
+    CREWAI_AVAILABLE = False
 
 from .crew_agents import (
     create_code_analysis_agent,

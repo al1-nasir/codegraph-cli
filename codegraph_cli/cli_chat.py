@@ -13,7 +13,6 @@ import typer
 from . import config
 from .chat_agent import ChatAgent
 from .chat_session import SessionManager
-from .crew_chat import CrewChatAgent
 from .llm import LocalLLM
 from .orchestrator import MCPOrchestrator
 from .rag import RAGRetriever
@@ -299,7 +298,13 @@ def start_chat(
     rag_retriever = RAGRetriever(context.store, embedding_model)
     
     if use_crew:
-        print(f"\n  {C_MAGENTA}🤖 Initializing CrewAI multi-agent system...{C_RESET}")
+        try:
+            from .crew_chat import CrewChatAgent
+        except ImportError:
+            print(f"\n  {C_RED}CrewAI is not installed.{C_RESET}")
+            print(f"  {C_DIM}Install with: pip install codegraph-cli[crew]{C_RESET}\n")
+            raise typer.Exit(1)
+        print(f"\n  {C_MAGENTA}Initializing CrewAI multi-agent system...{C_RESET}")
         agent = CrewChatAgent(context, llm, rag_retriever)
     else:
         orchestrator = MCPOrchestrator(

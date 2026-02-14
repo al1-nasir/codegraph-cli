@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codegraph-cli"
-version = "2.1.0"
+version = "2.1.1"
 description = "AI-powered code intelligence CLI with multi-agent analysis, impact graphs, and conversational coding."
 readme = "README.md"
 license = {text = "MIT"}
