@@ -7,7 +7,7 @@ from typing import Optional
 
 from .chat_session import SessionManager
 from .codegen_agent import CodeGenAgent
-from .context_manager import assemble_context_for_llm, detect_intent
+from .context_manager import SymbolMemory, assemble_context_for_llm, detect_intent
 from .llm import LocalLLM
 from .models_v2 import ChatSession, CodeProposal
 from .orchestrator import MCPOrchestrator
@@ -59,11 +59,60 @@ class ChatAgent:
         self.rag_retriever = rag_retriever
         self.session_manager = SessionManager()
         
+        # Symbol memory — tracks recently discussed symbols & files
+        # so we can skip redundant RAG queries.
+        self.symbol_memory = SymbolMemory()
+        
         # Initialize specialized agents
         from .codegen_agent import CodeGenAgent
         from .refactor_agent import RefactorAgent
         self.codegen_agent = CodeGenAgent(context.store, llm, project_context=context)
         self.refactor_agent = RefactorAgent(context.store)
+
+        # Build enhanced system prompt with auto-context
+        self.system_prompt = self._build_system_prompt()
+
+    def _build_system_prompt(self) -> str:
+        """Build system prompt enriched with project context.
+
+        Includes project name, source path, indexed file/symbol counts,
+        node-type breakdown, and recently modified files so the LLM has
+        immediate awareness of the codebase.
+        """
+        base = SYSTEM_PROMPT
+
+        try:
+            summary = self.context.get_project_summary()
+            parts = [
+                "\n\nProject Context:",
+                f"- Project: {summary.get('project_name', 'unknown')}",
+                f"- Source: {summary.get('source_path', 'N/A')}",
+                f"- Indexed: {summary.get('indexed_files', 0)} files, {summary.get('total_nodes', 0)} symbols",
+            ]
+
+            node_types = summary.get("node_types", {})
+            if node_types:
+                parts.append(
+                    f"- Breakdown: {node_types.get('function', 0)} functions, "
+                    f"{node_types.get('class', 0)} classes, "
+                    f"{node_types.get('module', 0)} modules"
+                )
+
+            # Recently modified files
+            if self.context.has_source_access:
+                try:
+                    items = self.context.list_directory(".")
+                    files = [f for f in items if f["type"] == "file"]
+                    files.sort(key=lambda f: f.get("modified", ""), reverse=True)
+                    recent = [f["name"] for f in files[:5]]
+                    if recent:
+                        parts.append(f"- Recently modified: {', '.join(recent)}")
+                except Exception:
+                    pass
+
+            return base + "\n".join(parts)
+        except Exception:
+            return base
     
     def process_message(
         self,
@@ -72,6 +121,10 @@ class ChatAgent:
     ) -> str:
         """Process user message and generate response.
         
+        Note: The caller (REPL) is responsible for adding messages to
+        the session.  This method does NOT add messages itself to avoid
+        duplicate entries.
+        
         Args:
             user_message: User's message
             session: Current chat session
@@ -79,10 +132,6 @@ class ChatAgent:
         Returns:
             Assistant's response
         """
-        # Add user message to session
-        timestamp = datetime.now().isoformat()
-        session.add_message("user", user_message, timestamp)
-        
         # Detect intent
         intent = detect_intent(user_message)
         
@@ -102,9 +151,6 @@ class ChatAgent:
         else:
             # General chat - use LLM with RAG context
             response = self._handle_chat(user_message, session)
-        
-        # Add assistant response to session
-        session.add_message("assistant", response, datetime.now().isoformat())
         
         # Save session
         self.session_manager.save_session(session)
@@ -289,13 +335,14 @@ class ChatAgent:
     
     def _handle_chat(self, message: str, session: ChatSession) -> str:
         """Handle general chat with LLM and RAG context."""
-        # Assemble context using smart RAG strategy
+        # Assemble context using smart RAG strategy + symbol memory
         context_messages = assemble_context_for_llm(
             user_message=message,
             session=session,
             rag_retriever=self.rag_retriever,
-            system_prompt=SYSTEM_PROMPT,
-            max_tokens=8000
+            system_prompt=self.system_prompt,
+            max_tokens=8000,
+            symbol_memory=self.symbol_memory,
         )
         
         # Call LLM

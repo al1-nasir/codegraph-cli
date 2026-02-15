@@ -1,6 +1,6 @@
 """Configurable code embedding engine with multiple model support.
 
-Supported models (configure via ``cg set-embedding``):
+Supported models (configure via ``cg config set-embedding``):
 
 ========== ====================================== ========= ====== ======================
 Key        HuggingFace Model                      Download  Dim    Notes
@@ -301,7 +301,7 @@ class HashEmbeddingModel:
 
     Provides basic keyword-level similarity. Used as the default when
     ``torch``/``transformers`` are not installed or when ``hash`` is
-    selected via ``cg set-embedding hash``.
+    selected via ``cg config set-embedding hash``.
     """
 
     def __init__(self, dim: int = 256) -> None:
@@ -396,14 +396,104 @@ def get_embedder(
 # ===================================================================
 
 def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
-    """Cosine similarity between two L2-normalised vectors."""
+    """Cosine similarity between two vectors.
+
+    If vectors are already L2-normalised the dot product *is* the
+    cosine similarity.  For safety this function still divides by
+    the product of norms so it works correctly even when vectors
+    are *not* pre-normalised.
+
+    Returns a value in ``[-1, 1]``.  Zero-length or mismatched
+    vectors return ``0.0``.
+    """
     if not vec_a or not vec_b or len(vec_a) != len(vec_b):
         return 0.0
-    return sum(a * b for a, b in zip(vec_a, vec_b))
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(a * a for a in vec_a))
+    norm_b = math.sqrt(sum(b * b for b in vec_b))
+    if norm_a < 1e-12 or norm_b < 1e-12:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 
 def _l2_normalize(vec: List[float]) -> List[float]:
+    """L2-normalise *vec* in-place.  Returns zero vector unchanged."""
     norm = math.sqrt(sum(v * v for v in vec))
-    if norm == 0:
+    if norm < 1e-12:
         return vec
     return [v / norm for v in vec]
+
+
+def embedding_norm(vec: List[float]) -> float:
+    """Return the L2 norm of a vector."""
+    return math.sqrt(sum(v * v for v in vec))
+
+
+# ===================================================================
+# Debug / Validation Utilities
+# ===================================================================
+
+def validate_embedding(vec: List[float], label: str = "embedding") -> Dict[str, Any]:
+    """Validate an embedding vector and return diagnostic info.
+
+    Checks:
+    - Vector is non-empty
+    - Vector contains no NaN / Inf values
+    - L2 norm is approximately 1.0 (unit-normalised)
+    - Vector is not all-zeros
+
+    Returns a dict with ``ok``, ``norm``, ``dim``, and any ``warnings``.
+    """
+    info: Dict[str, Any] = {
+        "label": label,
+        "dim": len(vec),
+        "ok": True,
+        "warnings": [],
+    }
+
+    if not vec:
+        info["ok"] = False
+        info["warnings"].append("empty vector")
+        info["norm"] = 0.0
+        return info
+
+    norm = embedding_norm(vec)
+    info["norm"] = norm
+
+    if any(math.isnan(v) or math.isinf(v) for v in vec):
+        info["ok"] = False
+        info["warnings"].append("contains NaN or Inf")
+
+    if norm < 1e-9:
+        info["ok"] = False
+        info["warnings"].append("zero vector")
+    elif abs(norm - 1.0) > 0.01:
+        info["warnings"].append(f"not unit-normalised (norm={norm:.4f})")
+
+    return info
+
+
+def debug_embed(text: str, embedder: Optional[Union["TransformerEmbedder", "HashEmbeddingModel"]] = None) -> Dict[str, Any]:
+    """Embed *text* and return detailed diagnostics.
+
+    If *embedder* is ``None`` the default embedder from config is used.
+
+    Returns dict with ``text``, ``dim``, ``norm``, ``first_5``,
+    ``self_similarity``, and ``validation``.
+    """
+    if embedder is None:
+        embedder = get_embedder()
+
+    vec = embedder.embed_text(text)
+    val = validate_embedding(vec, label=text[:60])
+    self_sim = cosine_similarity(vec, vec)
+
+    return {
+        "text": text[:120],
+        "model": getattr(embedder, "model_key", "hash"),
+        "dim": len(vec),
+        "norm": val["norm"],
+        "first_5": vec[:5],
+        "self_similarity": self_sim,
+        "validation": val,
+    }

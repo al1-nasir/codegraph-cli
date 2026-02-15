@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Python**: 3.8 or higher
+- **Python**: 3.9 or higher
 - **Operating System**: Linux, macOS, or Windows
 - **Memory**: Minimum 8 GB RAM (16-32 GB recommended for large projects)
 - **Optional**: Ollama for local LLM reasoning (recommended but not required)
@@ -13,8 +13,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/CodeGraph-CLI.git
-cd CodeGraph-CLI
+git clone https://github.com/al1-nasir/codegraph-cli.git
+cd codegraph-cli
 
 # Create virtual environment
 python3 -m venv .venv
@@ -220,5 +220,5 @@ export CODEGRAPH_HOME="$(pwd)/.codegraph_local"
 ## Getting Help
 
 - Run `cg COMMAND --help` for command-specific help
-- Check the [GitHub Issues](https://github.com/yourusername/CodeGraph-CLI/issues)
+- Check the [GitHub Issues](https://github.com/al1-nasir/codegraph-cli/issues)
 - Read the full documentation in the `docs/` directory

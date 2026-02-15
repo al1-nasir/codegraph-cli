@@ -2,16 +2,65 @@
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from pathlib import Path
 from typing import Dict, List, Set
 
 from .embeddings import HashEmbeddingModel, TransformerEmbedder
 from .llm import LocalLLM
-from .models import ImpactReport
+from .models import ImpactReport, Node
 from .parser import PythonGraphParser
 from .rag import RAGRetriever
 from .storage import GraphStore
+
+# Regex to strip bare import lines from chunk text
+_IMPORT_RE = re.compile(r"^(?:from\s+\S+\s+)?import\s+.+$", re.MULTILINE)
+
+# Maximum characters to keep for a single chunk's code body.
+# Module-level nodes can be very large; truncating keeps embeddings
+# focused on the symbol's signature + docstring + first N lines.
+_MAX_CHUNK_CODE_CHARS = 1500
+
+
+def _build_chunk_text(node: Node) -> str:
+    """Build structured chunk text for embedding.
+
+    The text is formatted so that the embedding model captures:
+    - **file path** (helps retrieval when users mention filenames)
+    - **symbol name + type** (boosts exact-match semantics)
+    - **docstring** (captures purpose / intent)
+    - **code body** (captures implementation detail)
+
+    Import lines and decorators-only boilerplate are stripped to
+    reduce noise.  Module-level nodes are truncated to avoid huge
+    embeddings that dilute meaning.
+    """
+    parts: List[str] = [
+        f"file: {node.file_path}",
+        f"symbol: {node.qualname}",
+        f"type: {node.node_type}",
+    ]
+
+    if node.docstring:
+        parts.append(f"doc: {node.docstring.strip()}")
+
+    # Clean code: strip import lines for non-module nodes
+    code = node.code
+    if node.node_type != "module":
+        code = _IMPORT_RE.sub("", code).strip()
+    else:
+        # For modules keep only the first N chars to avoid huge chunks
+        code = code[:_MAX_CHUNK_CODE_CHARS]
+
+    # Truncate overly long code
+    if len(code) > _MAX_CHUNK_CODE_CHARS:
+        code = code[:_MAX_CHUNK_CODE_CHARS] + "\n# ... (truncated)"
+
+    if code:
+        parts.append(code)
+
+    return "\n".join(parts)
 
 
 class GraphAgent:
@@ -31,7 +80,7 @@ class GraphAgent:
         total_nodes = len(nodes)
         
         for idx, node in enumerate(nodes, 1):
-            text = "\n".join([node.qualname, node.docstring, node.code])
+            text = _build_chunk_text(node)
             emb = self.embedding_model.embed_text(text)
             node_payload.append((node, emb))
             
@@ -43,13 +92,20 @@ class GraphAgent:
         if show_progress:
             print(f"\r📊 Indexing: {total_nodes}/{total_nodes} nodes (100%)  ")
 
-        self.store.insert_nodes(node_payload)
+        emb_model_key = getattr(self.embedding_model, 'model_key', 'hash')
+        emb_dim = getattr(self.embedding_model, 'dim', 256)
+
+        self.store.insert_nodes(node_payload, model_key=emb_model_key)
         self.store.insert_edges(edges)
+
+        # Record embedding model info in project metadata
         self.store.set_metadata(
             {
                 "project_root": str(project_root),
                 "node_count": len(nodes),
                 "edge_count": len(edges),
+                "embedding_model": emb_model_key,
+                "embedding_dim": emb_dim,
             }
         )
         return {"nodes": len(nodes), "edges": len(edges)}

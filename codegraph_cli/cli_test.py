@@ -45,7 +45,12 @@ def generate_unit_tests(
     symbol: str = typer.Argument(..., help="Function name to generate tests for"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output test file path"),
 ):
-    """Generate unit tests for a function."""
+    """🧪 Generate unit tests for a function.
+
+    Example:
+      cg v2 test unit "calculate_total"
+      cg v2 test unit "UserService.authenticate" --output tests/test_auth.py
+    """
     pm = ProjectManager()
     agent = _get_testgen_agent(pm)
     
@@ -106,7 +111,12 @@ def generate_integration_tests(
     flow: str = typer.Argument(..., help="User flow description"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output test file path"),
 ):
-    """Generate integration tests for a user flow."""
+    """🧪 Generate integration tests for a user flow.
+
+    Example:
+      cg v2 test integration "user login and token refresh"
+      cg v2 test integration "payment processing" --output tests/test_payments.py
+    """
     pm = ProjectManager()
     agent = _get_testgen_agent(pm)
     
@@ -155,7 +165,11 @@ def generate_integration_tests(
 def show_coverage_prediction(
     symbol: str = typer.Argument(..., help="Function to analyze"),
 ):
-    """Show predicted coverage impact of generating tests."""
+    """📊 Show predicted coverage impact of generating tests.
+
+    Example:
+      cg v2 test coverage "process_payment"
+    """
     pm = ProjectManager()
     agent = _get_testgen_agent(pm)
     

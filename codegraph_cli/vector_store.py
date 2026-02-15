@@ -49,22 +49,26 @@ class VectorStore:
     ======== ============ =====================================
     """
 
-    def __init__(self, project_dir: Path) -> None:
+    def __init__(self, project_dir: Path, model_key: str = "") -> None:
         if not LANCE_AVAILABLE:
             raise ImportError(
                 "lancedb is not installed. Install with: pip install lancedb pyarrow"
             )
 
         self.project_dir = project_dir
+        self.model_key = model_key
         self._lance_dir = project_dir / "lancedb"
         self._lance_dir.mkdir(exist_ok=True, parents=True)
+
+        # Each embedding model gets its own table to avoid dimension conflicts
+        self._table_name = f"code_nodes_{model_key}" if model_key else "code_nodes"
 
         self._db: Any = lancedb.connect(str(self._lance_dir))
         self._table: Optional[Any] = None
 
         # Try to open existing table
         try:
-            self._table = self._db.open_table("code_nodes")
+            self._table = self._db.open_table(self._table_name)
         except Exception:
             self._table = None
 
@@ -106,7 +110,7 @@ class VectorStore:
         if self._table is None:
             # First insert – create the table (schema inferred from data)
             self._table = self._db.create_table(
-                "code_nodes", data=rows, mode="overwrite",
+                self._table_name, data=rows, mode="overwrite",
             )
         else:
             # Subsequent inserts – upsert by deleting old IDs first
@@ -150,7 +154,12 @@ class VectorStore:
             return empty
 
         try:
-            query = self._table.search(query_embedding).limit(n_results)
+            query = (
+                self._table
+                .search(query_embedding)
+                .metric("cosine")
+                .limit(n_results)
+            )
 
             # Apply metadata filters as SQL WHERE clause
             if where:
@@ -171,8 +180,11 @@ class VectorStore:
         docs: List[str] = []
 
         for row in results:
+            # With cosine metric, _distance is the *cosine distance*
+            # (1 − cos_sim), so values are in [0, 2].
+            dist = row.get("_distance", 0.0)
             ids.append(row.get("id", ""))
-            distances.append(row.get("_distance", 0.0))
+            distances.append(dist)
             metas.append({
                 "node_type": row.get("node_type", ""),
                 "file_path": row.get("file_path", ""),
@@ -209,7 +221,12 @@ class VectorStore:
             return []
 
         try:
-            query = self._table.search(query_embedding).limit(n_results)
+            query = (
+                self._table
+                .search(query_embedding)
+                .metric("cosine")
+                .limit(n_results)
+            )
             if where_sql:
                 query = query.where(where_sql)
             return query.to_list()
@@ -260,13 +277,57 @@ class VectorStore:
             except Exception:
                 pass
 
+    def delete_by_file_path(self, file_path: str) -> int:
+        """Delete all nodes belonging to a specific file.
+
+        Args:
+            file_path: Relative file path (must match the ``file_path``
+                       column stored during indexing).
+
+        Returns:
+            Number of rows deleted (0 if table is empty / missing).
+        """
+        if self._table is None:
+            return 0
+        try:
+            before = self._table.count_rows()
+            # Escape single quotes in the path to avoid SQL injection
+            safe_path = file_path.replace("'", "''")
+            self._table.delete(f"file_path = '{safe_path}'")
+            after = self._table.count_rows()
+            return max(0, before - after)
+        except Exception as exc:
+            logger.warning(
+                "delete_by_file_path('%s') failed: %s", file_path, exc,
+            )
+            return 0
+
     def clear(self) -> None:
         """Drop all data and recreate an empty table."""
         try:
-            self._db.drop_table("code_nodes")
+            self._db.drop_table(self._table_name)
         except Exception:
             pass
         self._table = None
+
+    def list_model_tables(self) -> List[str]:
+        """Return model keys for which a LanceDB table exists.
+
+        Tables are named ``code_nodes_{model_key}``; this method strips
+        the prefix and returns just the model keys.
+        """
+        try:
+            all_tables = self._db.table_names()
+        except Exception:
+            return []
+        models: List[str] = []
+        prefix = "code_nodes_"
+        for name in all_tables:
+            if name == "code_nodes":
+                models.append("")  # legacy table
+            elif name.startswith(prefix):
+                models.append(name[len(prefix):])
+        return models
 
     # ------------------------------------------------------------------
     # Informational
@@ -291,3 +352,44 @@ class VectorStore:
             return df.head(limit).to_dict(orient="records")
         except Exception:
             return []
+
+    def debug_search(
+        self,
+        query_embedding: List[float],
+        n_results: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Diagnostic search returning raw scores and distance details.
+
+        Unlike :meth:`search`, this returns a flat list of dicts that
+        includes the raw ``_distance`` value, the derived similarity
+        score, and key metadata — useful for inspecting retrieval
+        quality from the CLI.
+        """
+        if self._table is None:
+            return []
+        try:
+            results = (
+                self._table
+                .search(query_embedding)
+                .metric("cosine")
+                .limit(n_results)
+                .to_list()
+            )
+        except Exception as exc:
+            logger.warning("debug_search failed: %s", exc)
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for row in results:
+            dist = row.get("_distance", 0.0)
+            out.append({
+                "id": row.get("id", ""),
+                "name": row.get("name", ""),
+                "qualname": row.get("qualname", ""),
+                "node_type": row.get("node_type", ""),
+                "file_path": row.get("file_path", ""),
+                "cosine_distance": round(dist, 5),
+                "similarity_score": round(max(0.0, 1.0 - dist), 5),
+                "document_preview": (row.get("document", "") or "")[:120],
+            })
+        return out

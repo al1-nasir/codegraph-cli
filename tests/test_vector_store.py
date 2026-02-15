@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from codegraph_cli.vector_store import VectorStore, CHROMA_AVAILABLE
+from codegraph_cli.vector_store import VectorStore, LANCE_AVAILABLE
 
 
-@pytest.mark.skipif(not CHROMA_AVAILABLE, reason="chromadb not installed")
+@pytest.mark.skipif(not LANCE_AVAILABLE, reason="lancedb not installed")
 class TestVectorStore:
     """Test VectorStore functionality."""
     
@@ -16,7 +16,7 @@ class TestVectorStore:
         """Test vector store initialization."""
         store = VectorStore(temp_dir)
         assert store.project_dir == temp_dir
-        assert (temp_dir / ".chroma").exists()
+        assert (temp_dir / "lancedb").exists()
         assert store.count() == 0
     
     def test_add_nodes(self, temp_dir: Path):

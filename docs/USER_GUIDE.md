@@ -30,7 +30,7 @@ A comprehensive guide to using all features of CodeGraph CLI - your local-first 
 pip install codegraph-cli
 
 # Or install from source
-git clone https://github.com/your-repo/codegraph-cli
+git clone https://github.com/al1-nasir/codegraph-cli
 cd codegraph-cli
 pip install -e .
 ```
@@ -51,7 +51,7 @@ cg --help
 The easiest way to configure CodeGraph CLI is using the interactive setup wizard:
 
 ```bash
-cg setup
+cg config setup
 ```
 
 This will guide you through:
@@ -67,7 +67,7 @@ This will guide you through:
    - For cloud providers: Enter API key and select model
 
 3. **Saving Configuration:**
-   - Configuration is saved to `~/.codegraph/config.json`
+   - Configuration is saved to `~/.codegraph/config.toml`
 
 ### Manual Configuration
 
@@ -657,7 +657,7 @@ Understanding when embeddings and LLM are used helps you optimize performance an
 
 1. **Start with Setup:**
    ```bash
-   cg setup  # Configure your LLM provider
+   cg config setup  # Configure your LLM provider
    ```
 
 2. **Index Your Project:**
@@ -723,7 +723,7 @@ cg v2 test unit new_function --output tests/test_new.py
 
 | Command | Description |
 |---------|-------------|
-| `cg setup` | Interactive LLM configuration |
+| `cg config setup` | Interactive LLM configuration |
 | `cg index <path>` | Index a project |
 | `cg list-projects` | List all projects |
 | `cg load-project <name>` | Load a project |
@@ -806,7 +806,7 @@ ollama serve
 
 **Solution:** Run setup again with correct API key:
 ```bash
-cg setup
+cg config setup
 ```
 
 ---

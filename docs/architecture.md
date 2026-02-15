@@ -51,9 +51,10 @@ CodeGraph CLI is a **fully local**, **multi-agent** system for semantic code ana
 **Purpose**: Extract code structure from source files.
 
 **How it works**:
-- Uses Python's `ast` module to parse source code
+- Uses **tree-sitter** grammars for Python, JavaScript, and TypeScript
+- Falls back to Python's `ast` module when tree-sitter grammars are unavailable
 - Visits AST nodes to extract:
-  - **Modules** - Python files
+  - **Modules** - Source files
   - **Classes** - Class definitions
   - **Functions** - Function/method definitions
 - Detects relationships:
@@ -79,10 +80,7 @@ Edges:
   - process_payment --calls--> charge_card
 ```
 
-**Extensibility**: The parser is modular. Future versions can add:
-- `JavaScriptParser` for JS/TS
-- `JavaParser` for Java
-- Language detection and routing
+**Multi-language support**: The parser ships with tree-sitter grammars for Python, JavaScript, and TypeScript. Additional languages can be added by installing the corresponding `tree-sitter-<lang>` package and registering the grammar.
 
 ---
 
@@ -260,14 +258,15 @@ orchestrator = MCPOrchestrator(store)
 **Purpose**: Generate human-readable explanations.
 
 **Implementation**:
-- **Primary**: Ollama HTTP API
-- **Fallback**: Deterministic template-based explanations
+- **Six providers**: Ollama, Groq, OpenAI, Anthropic, Gemini, OpenRouter
+- **Fallback**: Deterministic template-based explanations when LLM is unavailable
+- **CrewAI routing**: Models are routed through LiteLLM for multi-agent mode
 
-**Why Ollama?**
-- Fully local (no cloud calls)
-- Easy to install and use
-- Supports many models (Qwen, CodeLlama, etc.)
-- Optional (system works without it)
+**Why multiple providers?**
+- Ollama: Fully local, no cloud calls, private
+- Groq / OpenRouter: Fast, free tiers available
+- OpenAI / Anthropic / Gemini: Best quality for complex tasks
+- Configuration stored in `~/.codegraph/config.toml`
 
 **Request Flow**:
 ```
@@ -336,29 +335,30 @@ Output displayed to user
 
 ## Design Principles
 
-### 1. Fully Local
-- No cloud API calls required
+### 1. Local-First
+- No cloud API calls required (Ollama + hash embeddings work fully offline)
 - All data stays on your machine
-- Works offline
+- Cloud providers are optional enhancements
 
-### 2. Minimal Dependencies
-- Core: Only Typer for CLI
-- Optional: pytest for testing
-- No heavy ML libraries required
+### 2. Minimal Core, Rich Extras
+- Core: Typer, tree-sitter, SQLite, LanceDB
+- Optional: CrewAI for multi-agent, transformers + torch for neural embeddings
+- No heavy dependencies in the base install
 
 ### 3. Modular Architecture
 - Each component has single responsibility
-- Easy to extend (new parsers, embeddings, etc.)
+- Easy to extend (new parsers, embeddings, providers)
 - Agents are independent and testable
 
 ### 4. Graceful Degradation
-- Works without Ollama (fallback explanations)
+- Works without any LLM (fallback explanations)
 - Works without GPU (hash embeddings)
 - Works with limited RAM (SQLite is efficient)
+- Works without CrewAI (standard chat mode)
 
 ### 5. Developer-Friendly
 - Clear separation of concerns
-- Comprehensive tests
+- Comprehensive tests with pytest
 - Type hints throughout
 - Detailed documentation
 
@@ -448,7 +448,7 @@ def suggest_refactorings(symbol: str):
 
 **Bottlenecks**:
 - File I/O (reading source files)
-- AST parsing (Python's `ast.parse`)
+- Tree-sitter parsing
 - SQLite insertions
 
 **Optimizations**:
@@ -493,15 +493,12 @@ def suggest_refactorings(symbol: str):
 
 ## Future Enhancements
 
-See [implementation_plan.md](file:///home/ali-nasir/.gemini/antigravity/brain/a7281c58-055f-4987-8698-a7a1592000f5/implementation_plan.md) for detailed roadmap.
-
 **Planned Features**:
-- Multi-language support (JS, Java, Go)
-- Better embeddings (CodeBERT, FAISS)
-- Incremental indexing
-- Interactive graph visualization
-- Test generation suggestions
-- Refactoring recommendations
+- Additional language support (Go, Rust, Java)
+- Incremental indexing to avoid full re-scans
+- FAISS backend for large-scale vector search
+- Parallel file parsing for faster indexing
+- GitHub PR integration for automated reviews
 
 ---
 

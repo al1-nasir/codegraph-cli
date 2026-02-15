@@ -37,6 +37,7 @@ def create_file_ops_agent(tools: list, llm, project_context: str = "") -> Agent:
         verbose=False,
         allow_delegation=False,
         max_iter=15,
+        max_tokens=4096,
     )
 
 
@@ -59,13 +60,17 @@ def create_code_gen_agent(tools: list, llm, project_context: str = "") -> Agent:
             "4. Include proper error handling, type hints, and docstrings\n"
             "5. Use search_code and grep_in_project to understand how code is used before changing it\n"
             "6. When asked to improve/refactor, explain what you changed and why\n"
-            f"7. Generate complete, runnable code — never leave TODO placeholders{ctx}"
+            "7. Generate complete, runnable code — never leave TODO placeholders\n"
+            "8. When applying previously suggested improvements, check the PREVIOUS CONVERSATION "
+            "section in the task description for the exact changes that were recommended, then "
+            f"implement each one using the appropriate tools{ctx}"
         ),
         tools=tools,
         llm=llm,
         verbose=False,
         allow_delegation=False,
         max_iter=20,
+        max_tokens=4096,
     )
 
 
@@ -94,10 +99,11 @@ def create_code_analysis_agent(tools: list, llm, project_context: str = "") -> A
         verbose=False,
         allow_delegation=False,
         max_iter=15,
+        max_tokens=4096,
     )
 
 
-def create_coordinator_agent(llm, project_context: str = "") -> Agent:
+def create_coordinator_agent(llm, project_context: str = "", tools: list = None) -> Agent:
     """Coordinator agent — routes tasks to the right specialist."""
     ctx = f" Current Project: {project_context}." if project_context else ""
     return Agent(
@@ -105,7 +111,8 @@ def create_coordinator_agent(llm, project_context: str = "") -> Agent:
         goal=(
             "Understand user requests and coordinate specialist agents. Route file operations "
             "to File System Engineer, code changes to Senior Software Developer, and analysis "
-            "to Code Intelligence Analyst."
+            "to Code Intelligence Analyst. When users reference previous conversation, use the "
+            "provided history to fulfil follow-up requests."
         ),
         backstory=(
             f"You are a project coordinator managing a team of AI specialists.{ctx}\n\n"
@@ -114,15 +121,27 @@ def create_coordinator_agent(llm, project_context: str = "") -> Agent:
             "• Senior Software Developer — generates code, implements features, refactors\n"
             "• Code Intelligence Analyst — searches code, analyzes dependencies, explains logic\n\n"
             "RULES:\n"
-            "1. ALWAYS delegate to the right specialist — never try to do tasks yourself\n"
-            "2. For 'what is in this project' / 'show files' → delegate to File System Engineer\n"
+            "1. ALWAYS use tools directly to gather information BEFORE responding. "
+            "Call read_file, file_tree, search_code, get_project_summary, etc. "
+            "Never say 'I need to examine files' without actually doing it in the same step.\n"
+            "2. For complex file operations or code generation, delegate to the appropriate specialist\n"
             "3. For 'write code' / 'add feature' / 'fix bug' / 'refactor' → delegate to Senior Software Developer\n"
             "4. For 'find' / 'search' / 'explain' / 'how does X work' → delegate to Code Intelligence Analyst\n"
             "5. For complex tasks, break them into steps and delegate each step\n"
-            "6. Always return concrete answers based on actual project data from tools"
+            "6. Always return concrete answers based on actual project data from tools\n"
+            "7. CRITICAL — CONVERSATION CONTINUITY: When the user says things like "
+            "'apply those', 'implement that', 'do what you said', 'make those changes', or "
+            "references previous suggestions, look at the PREVIOUS CONVERSATION section in the "
+            "task description. It contains the full history of what was discussed. Extract the "
+            "specific suggestions/improvements from your earlier response and delegate to the "
+            "Senior Software Developer to ACTUALLY implement them using write_file/patch_file tools. "
+            "Never say you don't remember or can't access previous context — it's right there "
+            "in the task description."
         ),
+        tools=tools,
         llm=llm,
         verbose=False,
         allow_delegation=True,
-        max_iter=10,
+        max_iter=25,
+        max_tokens=4096,
     )

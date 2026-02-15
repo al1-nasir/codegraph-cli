@@ -273,6 +273,10 @@ class DeleteFileTool(ContextTool):
             backup_id = _backup_file(ctx.source_path, path, tag="delete")
             full_path = ctx.source_path / path
             full_path.unlink()
+
+            # Remove stale nodes from the code graph
+            ctx.remove_from_index(path)
+
             return f"✅ Deleted {path}\n   Backup: {backup_id} (use rollback_file to restore)"
         except Exception as e:
             return f"Error deleting file: {e}"

@@ -56,7 +56,13 @@ def generate_code(
     llm_api_key: Optional[str] = typer.Option(config.LLM_API_KEY, help="API key for LLM"),
     llm_model: str = typer.Option(config.LLM_MODEL, help="LLM model"),
 ):
-    """Generate code from natural language description (v2.0 experimental)."""
+    """✨ Generate code from natural language description (v2.0 experimental).
+
+    Example:
+      cg v2 generate 'add REST API endpoint for users'
+      cg v2 generate 'add login function' --file auth.py
+      cg v2 generate 'create data model' --output models/ --auto-apply
+    """
     pm = ProjectManager()
     agent = _get_codegen_agent(pm)
     
@@ -116,7 +122,11 @@ def generate_code(
 def rollback_changes(
     backup_id: str = typer.Argument(..., help="Backup ID to rollback to"),
 ):
-    """Rollback to a previous backup."""
+    """⏪ Rollback to a previous backup.
+
+    Example:
+      cg v2 rollback backup_20240101_120000
+    """
     diff_engine = DiffEngine()
     
     typer.echo(f"🔄 Rolling back to backup: {backup_id}")
@@ -130,7 +140,11 @@ def rollback_changes(
 
 @v2_app.command("list-backups")
 def list_backups():
-    """List all available backups."""
+    """📦 List all available backups.
+
+    Example:
+      cg v2 list-backups
+    """
     diff_engine = DiffEngine()
     backups = diff_engine.list_backups()
     
@@ -156,7 +170,13 @@ def review_code(
     use_llm: bool = typer.Option(False, "--llm", help="Use LLM for deeper analysis"),
     show_fixes: bool = typer.Option(False, "--fix", help="Show auto-fix suggestions"),
 ):
-    """Run AI-powered code review on a file."""
+    """🔍 Run AI-powered code review on a file.
+
+    Example:
+      cg v2 review src/auth.py
+      cg v2 review src/models.py --check security --llm
+      cg v2 review src/api.py --fix --verbose
+    """
     from .bug_detector import BugDetector
     from .security_scanner import SecurityScanner
     from .performance_analyzer import PerformanceAnalyzer

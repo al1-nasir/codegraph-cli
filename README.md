@@ -4,7 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/al1-nasir/codegraph-cli)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/al1-nasir/codegraph-cli)
+[![CI](https://github.com/al1-nasir/codegraph-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/al1-nasir/codegraph-cli/actions/workflows/ci.yml)
 
 ---
 
@@ -62,15 +63,15 @@ pip install -e ".[dev]"
 ### 1. Configure your LLM provider
 
 ```bash
-cg setup
+cg config setup
 ```
 
 This runs an interactive wizard that writes configuration to `~/.codegraph/config.toml`. Alternatively, switch providers directly:
 
 ```bash
-cg set-llm openrouter
-cg set-llm groq
-cg set-llm ollama
+cg config set-llm openrouter
+cg config set-llm groq
+cg config set-llm ollama
 ```
 
 ### 2. Index a project
@@ -97,18 +98,18 @@ cg chat start --crew    # multi-agent mode
 
 | Provider | Type | Configuration |
 |----------|------|---------------|
-| Ollama | Local, free | `cg set-llm ollama` |
-| Groq | Cloud, free tier | `cg set-llm groq` |
-| OpenAI | Cloud | `cg set-llm openai` |
-| Anthropic | Cloud | `cg set-llm anthropic` |
-| Gemini | Cloud | `cg set-llm gemini` |
-| OpenRouter | Cloud, multi-model | `cg set-llm openrouter` |
+| Ollama | Local, free | `cg config set-llm ollama` |
+| Groq | Cloud, free tier | `cg config set-llm groq` |
+| OpenAI | Cloud | `cg config set-llm openai` |
+| Anthropic | Cloud | `cg config set-llm anthropic` |
+| Gemini | Cloud | `cg config set-llm gemini` |
+| OpenRouter | Cloud, multi-model | `cg config set-llm openrouter` |
 
 All configuration is stored in `~/.codegraph/config.toml`. No environment variables required.
 
 ```bash
-cg show-llm        # view current provider, model, and endpoint
-cg unset-llm       # reset to defaults
+cg config show-llm        # view current provider, model, and endpoint
+cg config unset-llm       # reset to defaults
 ```
 
 ---
@@ -119,18 +120,18 @@ CodeGraph supports configurable embedding models for semantic code search. Choos
 
 | Model | Download | Dim | Quality | Command |
 |-------|----------|-----|---------|---------|
-| hash | 0 bytes | 256 | Keyword-only | `cg set-embedding hash` |
-| minilm | ~80 MB | 384 | Decent | `cg set-embedding minilm` |
-| bge-base | ~440 MB | 768 | Good | `cg set-embedding bge-base` |
-| jina-code | ~550 MB | 768 | Code-aware | `cg set-embedding jina-code` |
-| qodo-1.5b | ~6.2 GB | 1536 | Best | `cg set-embedding qodo-1.5b` |
+| hash | 0 bytes | 256 | Keyword-only | `cg config set-embedding hash` |
+| minilm | ~80 MB | 384 | Decent | `cg config set-embedding minilm` |
+| bge-base | ~440 MB | 768 | Good | `cg config set-embedding bge-base` |
+| jina-code | ~550 MB | 768 | Code-aware | `cg config set-embedding jina-code` |
+| qodo-1.5b | ~6.2 GB | 1536 | Best | `cg config set-embedding qodo-1.5b` |
 
 The default is `hash` (zero-dependency, no download). Neural models require the `[embeddings]` extra and are downloaded on first use from HuggingFace.
 
 ```bash
-cg set-embedding jina-code    # switch to a neural model
-cg show-embedding             # view current model and all options
-cg unset-embedding            # reset to hash default
+cg config set-embedding jina-code    # switch to a neural model
+cg config show-embedding             # view current model and all options
+cg config unset-embedding            # reset to hash default
 ```
 
 After changing the embedding model, re-index your project:
@@ -250,7 +251,7 @@ CLI Layer (Typer)
             +-- Code Analysis Agent ---> 3 search/analysis tools
 ```
 
-**Embeddings**: Five models available via `cg set-embedding`. Hash (default, zero-dependency) through Qodo-Embed-1-1.5B (best quality, 6 GB). Neural models use raw `transformers` + `torch` — no sentence-transformers overhead. Models are cached in `~/.codegraph/models/`.
+**Embeddings**: Five models available via `cg config set-embedding`. Hash (default, zero-dependency) through Qodo-Embed-1-1.5B (best quality, 6 GB). Neural models use raw `transformers` + `torch` — no sentence-transformers overhead. Models are cached in `~/.codegraph/models/`.
 
 **Parser**: tree-sitter grammars for Python, JavaScript, and TypeScript. Extracts modules, classes, functions, imports, and call relationships into a directed graph.
 

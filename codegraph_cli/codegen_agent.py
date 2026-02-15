@@ -135,7 +135,21 @@ class CodeGenAgent:
         Returns:
             Result of applying changes
         """
-        return self.diff_engine.apply_changes(proposal, backup=backup)
+        result = self.diff_engine.apply_changes(proposal, backup=backup)
+
+        # Incrementally reindex changed files so the code graph stays current
+        if result.success and self.project_context is not None:
+            for change in proposal.changes:
+                try:
+                    rel_path = change.file_path
+                    if change.change_type == "delete":
+                        self.project_context.remove_from_index(rel_path)
+                    else:
+                        self.project_context._incremental_reindex(rel_path)
+                except Exception:
+                    pass  # never break apply on index failure
+
+        return result
     
     def _gather_context(
         self,

@@ -37,7 +37,12 @@ def rename_symbol(
     preview_only: bool = typer.Option(False, "--preview", "-p", help="Preview changes without applying"),
     auto_apply: bool = typer.Option(False, "--auto-apply", "-y", help="Apply changes without confirmation"),
 ):
-    """Rename a symbol and update all references."""
+    """✏️  Rename a symbol and update all references.
+
+    Example:
+      cg v2 refactor rename "old_function" "new_function"
+      cg v2 refactor rename "UserModel" "Account" --preview
+    """
     pm = ProjectManager()
     agent = _get_refactor_agent(pm)
     
@@ -106,7 +111,12 @@ def extract_function(
     preview_only: bool = typer.Option(False, "--preview", "-p", help="Preview changes without applying"),
     auto_apply: bool = typer.Option(False, "--auto-apply", "-y", help="Apply changes without confirmation"),
 ):
-    """Extract code range into a new function."""
+    """📤 Extract code range into a new function.
+
+    Example:
+      cg v2 refactor extract-function src/handler.py 10 25 process_request
+      cg v2 refactor extract-function src/utils.py 5 15 validate_input --preview
+    """
     pm = ProjectManager()
     agent = _get_refactor_agent(pm)
     
@@ -169,7 +179,11 @@ def extract_service(
     preview_only: bool = typer.Option(False, "--preview", "-p", help="Preview changes without applying"),
     auto_apply: bool = typer.Option(False, "--auto-apply", "-y", help="Apply changes without confirmation"),
 ):
-    """Extract multiple functions to a new service file."""
+    """📤 Extract multiple functions to a new service file.
+
+    Example:
+      cg v2 refactor extract-service send_email notify_user --target src/notifications.py
+    """
     pm = ProjectManager()
     agent = _get_refactor_agent(pm)
     

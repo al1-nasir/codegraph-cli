@@ -5,6 +5,8 @@ Includes:
   symbols) designed to fit inside an LLM context window for agentic planning
   *before* deep retrieval.
 - **ConversationMemory**: sliding-window compression for chat history.
+- **SymbolMemory**: tracks recently discussed symbols, files, and proposals
+  so the chat agent can avoid redundant RAG queries.
 - Intent detection and query extraction utilities.
 """
 
@@ -250,6 +252,63 @@ class ConversationMemory:
         return " | ".join(summary_parts[-5:])
 
 
+class SymbolMemory:
+    """Tracks recently discussed symbols, files, and active proposals.
+
+    The chat agent consults this memory *before* hitting RAG so that
+    consecutive questions about the same symbol don't trigger redundant
+    vector searches.
+    """
+
+    def __init__(self, max_symbols: int = 20, max_files: int = 10) -> None:
+        self.max_symbols = max_symbols
+        self.max_files = max_files
+
+        # Recently discussed symbols (qualname → last SearchResult)
+        self.recent_symbols: Dict[str, Any] = {}
+        # Recently touched files
+        self.recent_files: List[str] = []
+        # Active proposal (if any)
+        self.active_proposal: Optional[CodeProposal] = None
+
+    def record_symbols(self, results: List[Any]) -> None:
+        """Record search results as recently discussed symbols."""
+        for r in results:
+            self.recent_symbols[r.qualname] = r
+        # Trim to limit
+        while len(self.recent_symbols) > self.max_symbols:
+            # Remove oldest (first inserted)
+            oldest_key = next(iter(self.recent_symbols))
+            del self.recent_symbols[oldest_key]
+
+    def record_file(self, file_path: str) -> None:
+        """Track a file that was recently discussed or modified."""
+        if file_path in self.recent_files:
+            self.recent_files.remove(file_path)
+        self.recent_files.insert(0, file_path)
+        self.recent_files = self.recent_files[: self.max_files]
+
+    def get_context_summary(self) -> str:
+        """Return a compact summary of tracked state for LLM context."""
+        parts: List[str] = []
+        if self.recent_symbols:
+            names = list(self.recent_symbols.keys())[-8:]
+            parts.append(f"Recent symbols: {', '.join(names)}")
+        if self.recent_files:
+            parts.append(f"Recent files: {', '.join(self.recent_files[:5])}")
+        if self.active_proposal:
+            parts.append(f"Active proposal: {self.active_proposal.description}")
+        return "\n".join(parts)
+
+    def find_cached_symbol(self, query: str) -> Optional[Any]:
+        """Check if *query* matches a recently discussed symbol."""
+        query_lower = query.lower()
+        for qualname, result in self.recent_symbols.items():
+            if query_lower in qualname.lower() or qualname.lower() in query_lower:
+                return result
+        return None
+
+
 def detect_intent(message: str) -> str:
     """Detect user intent from message.
     
@@ -343,11 +402,24 @@ def extract_queries_from_message(message: str, intent: str) -> List[str]:
             queries.append(f"{target} service")
     
     elif intent in ["impact", "explain"]:
-        # Extract symbol names
-        # Look for function/class names (CamelCase or snake_case)
-        symbols = re.findall(r'\b[A-Z][a-zA-Z0-9_]*\b|\b[a-z_][a-z0-9_]*\b', message)
-        if symbols:
-            queries.append(symbols[0])  # Use first symbol
+        # Extract symbol names — prefer CamelCase and snake_case
+        # identifiers that look like real code symbols, not common
+        # English words.
+        camel_case = re.findall(r'\b[A-Z][a-zA-Z0-9_]+\b', message)
+        snake_case = re.findall(r'\b[a-z_][a-z0-9_]*(?:_[a-z0-9]+)+\b', message)
+        code_symbols = camel_case + snake_case
+        if code_symbols:
+            queries.append(code_symbols[0])
+        else:
+            # Fallback: extract all identifier-like tokens, skip
+            # very short common English words.
+            _SKIP = {"how", "does", "what", "why", "the", "is", "in", "a", "an", "to", "for", "it", "of", "on"}
+            symbols = [
+                s for s in re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', message)
+                if s.lower() not in _SKIP and len(s) > 2
+            ]
+            if symbols:
+                queries.append(symbols[0])
     
     # Fallback: use entire message
     if not queries:
@@ -374,7 +446,8 @@ def assemble_context_for_llm(
     session: ChatSession,
     rag_retriever: RAGRetriever,
     system_prompt: str,
-    max_tokens: int = 8000
+    max_tokens: int = 8000,
+    symbol_memory: Optional[SymbolMemory] = None,
 ) -> List[Dict[str, str]]:
     """Assemble optimized context for LLM within token budget.
     
@@ -384,6 +457,7 @@ def assemble_context_for_llm(
         rag_retriever: RAG retriever for code search
         system_prompt: System prompt
         max_tokens: Maximum total tokens
+        symbol_memory: Optional SymbolMemory for tracking context
         
     Returns:
         List of message dicts for LLM
@@ -398,7 +472,12 @@ def assemble_context_for_llm(
     # 2. Detect intent
     intent = detect_intent(user_message)
     
-    # 3. Extract queries and retrieve code
+    # 3. Check symbol memory first (avoid redundant RAG)
+    memory_hit = None
+    if symbol_memory is not None:
+        memory_hit = symbol_memory.find_cached_symbol(user_message)
+    
+    # 4. Extract queries and retrieve code
     queries = extract_queries_from_message(user_message, intent)
     code_snippets = []
     
@@ -419,7 +498,25 @@ def assemble_context_for_llm(
     # Limit to top 10
     unique_snippets = unique_snippets[:10]
     
-    # 4. Add RAG context (high priority)
+    # Record in symbol memory
+    if symbol_memory is not None and unique_snippets:
+        symbol_memory.record_symbols(unique_snippets)
+        for s in unique_snippets:
+            symbol_memory.record_file(s.file_path)
+    
+    # 5. Add symbol memory summary (compact, low cost)
+    if symbol_memory is not None:
+        mem_summary = symbol_memory.get_context_summary()
+        if mem_summary:
+            mem_tokens = count_tokens(mem_summary)
+            if token_count + mem_tokens < max_tokens - 3000:
+                context.append({
+                    "role": "system",
+                    "content": f"Session context:\n{mem_summary}",
+                })
+                token_count += mem_tokens
+    
+    # 6. Add RAG context (high priority)
     if unique_snippets:
         rag_context = format_code_snippets(unique_snippets)
         rag_tokens = count_tokens(rag_context)
@@ -431,7 +528,7 @@ def assemble_context_for_llm(
             })
             token_count += rag_tokens
     
-    # 5. Add pending proposals if exist
+    # 7. Add pending proposals if exist
     if session.pending_proposals:
         proposal_text = format_proposals(session.pending_proposals)
         proposal_tokens = count_tokens(proposal_text)
@@ -443,7 +540,7 @@ def assemble_context_for_llm(
             })
             token_count += proposal_tokens
     
-    # 6. Add conversation history (compressed)
+    # 8. Add conversation history (compressed)
     conv_memory = ConversationMemory(max_recent=3)
     conv_context = conv_memory.get_context_for_llm(
         session,
@@ -451,14 +548,16 @@ def assemble_context_for_llm(
     )
     context.extend(conv_context)
     
-    # 7. Add current user message
+    # 9. Add current user message
     context.append({"role": "user", "content": user_message})
     
     return context
 
 
 def format_code_snippets(snippets: List) -> str:
-    """Format code snippets for LLM context.
+    """Format code snippets for LLM context with compression.
+    
+    Strips import lines, trims long code, and adds structured metadata.
     
     Args:
         snippets: List of SearchResult objects
@@ -466,14 +565,17 @@ def format_code_snippets(snippets: List) -> str:
     Returns:
         Formatted string
     """
+    from .rag import _compress_snippet
+
     blocks = []
     
     for snippet in snippets:
+        compressed = _compress_snippet(snippet.snippet, max_chars=800)
         blocks.append(
             f"[{snippet.node_type}] {snippet.qualname}\n"
-            f"Location: {snippet.file_path}:{snippet.start_line}\n"
-            f"Relevance: {snippet.score:.2f}\n"
-            f"```python\n{snippet.snippet[:800]}\n```"
+            f"file: {snippet.file_path}:{snippet.start_line}\n"
+            f"score: {snippet.score:.2f}\n"
+            f"```python\n{compressed}\n```"
         )
     
     return "\n\n".join(blocks)

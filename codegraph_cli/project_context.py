@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from .storage import GraphStore, ProjectManager
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectContext:
@@ -26,7 +29,10 @@ class ProjectContext:
         self.metadata = self.store.get_metadata()
         
         # Get source path from metadata
-        source_path_str = self.metadata.get("source_path")
+        source_path_str = (
+            self.metadata.get("source_path")
+            or self.metadata.get("project_root")
+        )
         if source_path_str:
             self.source_path = Path(source_path_str)
             if not self.source_path.exists():
@@ -143,7 +149,64 @@ class ProjectContext:
             full_path.parent.mkdir(parents=True, exist_ok=True)
         
         full_path.write_text(content, encoding="utf-8")
+        
+        # Auto-reindex the file so the code graph stays current
+        self._incremental_reindex(rel_path)
+        
         return True
+    
+    def _incremental_reindex(self, rel_path: str) -> None:
+        """Parse and re-embed a single file into the code graph.
+
+        Called automatically after :meth:`write_file` so that newly
+        created or modified files are immediately searchable via RAG,
+        semantic search, and impact analysis — without requiring a
+        manual full re-index.
+
+        Silently skips if the source path is unavailable, the file
+        doesn't exist on disk, or the embedder cannot be loaded.
+        """
+        if not self.has_source_access:
+            return
+
+        file_path = self.source_path / rel_path
+        if not file_path.is_file():
+            return
+
+        try:
+            from .embeddings import get_embedder
+
+            embedder = get_embedder()
+            model_key = getattr(embedder, "model_key", "hash")
+
+            count = self.store.index_single_file(
+                file_path=file_path,
+                project_root=self.source_path,
+                embedder=embedder,
+                model_key=model_key,
+            )
+            if count:
+                logger.info(
+                    "Auto-indexed %d nodes for %s", count, rel_path,
+                )
+        except Exception as exc:
+            # Never let indexing failures break file operations
+            logger.debug("Incremental reindex failed for %s: %s", rel_path, exc)
+
+    def remove_from_index(self, rel_path: str) -> int:
+        """Remove a file's nodes and edges from the code graph.
+
+        Called after deleting a file so stale symbols don't appear in
+        search results.
+
+        Returns:
+            Number of nodes removed.
+        """
+        try:
+            return self.store.remove_nodes_for_file(rel_path)
+        except Exception as exc:
+            logger.debug("remove_from_index failed for %s: %s", rel_path, exc)
+            return 0
     
     def file_exists(self, rel_path: str) -> bool:
         """Check if a file exists in the project.

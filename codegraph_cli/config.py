@@ -11,6 +11,14 @@ STATE_FILE = BASE_DIR / "state.json"
 DEFAULT_EMBEDDING_DIM = 256
 SUPPORTED_EXTENSIONS = {".py"}
 
+# Smart defaults — work without any configuration
+DEFAULT_CONFIG = {
+    "llm_provider": "ollama",
+    "llm_model": "qwen2.5-coder:7b",
+    "embedding_model": "hash",
+    "auto_setup": True,
+}
+
 # Load configuration from TOML file (if available)
 try:
     from .config_manager import load_config, load_embedding_config
@@ -20,14 +28,19 @@ except ImportError:
     _toml_config = {}
     _emb_config = {}
 
-# LLM Provider Configuration — loaded from ~/.codegraph/config.toml (set via `cg setup` or `cg set-llm`)
-LLM_PROVIDER = _toml_config.get("provider", "ollama")
+# LLM Provider Configuration — loaded from ~/.codegraph/config.toml (set via `cg config setup` or `cg config set-llm`)
+LLM_PROVIDER = _toml_config.get("provider", DEFAULT_CONFIG["llm_provider"])
 LLM_API_KEY = _toml_config.get("api_key", "")
-LLM_MODEL = _toml_config.get("model", "qwen2.5-coder:7b")
+LLM_MODEL = _toml_config.get("model", DEFAULT_CONFIG["llm_model"])
 LLM_ENDPOINT = _toml_config.get("endpoint", "http://127.0.0.1:11434/api/generate")
 
-# Embedding model — set via `cg set-embedding` (default: "hash" = no download)
-EMBEDDING_MODEL = _emb_config.get("model", "hash")
+# Embedding model — set via `cg config set-embedding` (default: "hash" = no download)
+EMBEDDING_MODEL = _emb_config.get("model", DEFAULT_CONFIG["embedding_model"])
+
+
+def config_file_exists() -> bool:
+    """Check whether a user config file has been created."""
+    return (BASE_DIR / "config.toml").exists()
 
 
 def ensure_base_dirs() -> None:

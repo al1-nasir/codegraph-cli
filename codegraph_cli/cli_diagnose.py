@@ -19,7 +19,12 @@ diagnose_app = typer.Typer(help="Detect and fix code errors")
 def check_errors(
     path: str = typer.Argument(".", help="Path to check (default: current directory)"),
 ):
-    """Scan project for syntax errors."""
+    """🔍 Scan project for syntax errors.
+
+    Example:
+      cg v2 diagnose check
+      cg v2 diagnose check ./src
+    """
     project_path = Path(path).resolve()
     
     if not project_path.exists():
@@ -49,7 +54,13 @@ def fix_errors(
     preview_only: bool = typer.Option(False, "--preview", "-p", help="Preview fixes without applying"),
     auto_apply: bool = typer.Option(False, "--auto-apply", "-y", help="Apply fixes without confirmation"),
 ):
-    """Automatically fix common syntax errors."""
+    """🔧 Automatically fix common syntax errors.
+
+    Example:
+      cg v2 diagnose fix
+      cg v2 diagnose fix ./src --preview
+      cg v2 diagnose fix ./src --auto-apply
+    """
     project_path = Path(path).resolve()
     
     if not project_path.exists():

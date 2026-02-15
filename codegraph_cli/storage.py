@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -109,13 +110,16 @@ class GraphStore:
         self.conn.row_factory = sqlite3.Row
         self._init_schema()
 
-        # Initialise LanceDB vector store
+        # Initialise LanceDB vector store (default / legacy table)
         self.vector_store: Optional[VectorStore] = None
         if VECTOR_STORE_AVAILABLE:
             try:
                 self.vector_store = VectorStore(project_dir)
             except Exception as exc:
                 logger.warning("LanceDB vector store unavailable: %s", exc)
+
+        # Per-model vector store cache: model_key → VectorStore
+        self._model_vector_stores: Dict[str, "VectorStore"] = {}
 
     def close(self) -> None:
         self.conn.close()
@@ -186,12 +190,19 @@ class GraphStore:
     # Insert
     # ------------------------------------------------------------------
 
-    def insert_nodes(self, rows: Iterable[Tuple[Node, List[float]]]) -> None:
+    def insert_nodes(
+        self,
+        rows: Iterable[Tuple[Node, List[float]]],
+        model_key: Optional[str] = None,
+    ) -> None:
         """Insert nodes with their embedding vectors.
 
         Each element of *rows* is a ``(Node, embedding)`` tuple.  Data is
         written to both SQLite (for structured queries) and LanceDB (for
         vector search).
+
+        When *model_key* is provided the embeddings are also written to
+        the model-specific LanceDB table (``code_nodes_{model_key}``).
         """
         rows_list = list(rows)
         if not rows_list:
@@ -225,25 +236,41 @@ class GraphStore:
         self.conn.commit()
 
         # ---- LanceDB (vector store) ------------------------------------
+        node_ids = [node.node_id for node, _ in rows_list]
+        embeddings = [emb for _, emb in rows_list]
+        metadatas = [
+            {
+                "node_type": node.node_type,
+                "file_path": node.file_path,
+                "qualname": node.qualname,
+                "name": node.name,
+            }
+            for node, _ in rows_list
+        ]
+        documents = [node.code for node, _ in rows_list]
+
+        # Write to legacy table (backward compat)
         if self.vector_store is not None:
             try:
-                node_ids = [node.node_id for node, _ in rows_list]
-                embeddings = [emb for _, emb in rows_list]
-                metadatas = [
-                    {
-                        "node_type": node.node_type,
-                        "file_path": node.file_path,
-                        "qualname": node.qualname,
-                        "name": node.name,
-                    }
-                    for node, _ in rows_list
-                ]
-                documents = [node.code for node, _ in rows_list]
                 self.vector_store.add_nodes(
                     node_ids, embeddings, metadatas, documents,
                 )
             except Exception as exc:
                 logger.warning("Failed to sync nodes to LanceDB: %s", exc)
+
+        # Write to model-specific table
+        if model_key:
+            model_vs = self.get_vector_store_for_model(model_key)
+            if model_vs is not None:
+                try:
+                    model_vs.add_nodes(
+                        node_ids, embeddings, metadatas, documents,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to sync nodes to model table '%s': %s",
+                        model_key, exc,
+                    )
 
     def insert_edges(self, edges: Iterable[Edge]) -> None:
         cur = self.conn.cursor()
@@ -252,6 +279,132 @@ class GraphStore:
             [(e.src, e.dst, e.edge_type) for e in edges],
         )
         self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Incremental index (single-file add / remove)
+    # ------------------------------------------------------------------
+
+    def remove_nodes_for_file(self, rel_path: str) -> int:
+        """Remove all nodes and related edges for a specific file.
+
+        Clears data from SQLite **and** every known LanceDB table
+        (legacy + per-model).
+
+        Args:
+            rel_path: Relative file path as stored in the ``file_path``
+                      column (e.g. ``"src/utils.py"``).
+
+        Returns:
+            Number of SQLite node rows deleted.
+        """
+        # 1. Collect node IDs that belong to this file
+        cur = self.conn.cursor()
+        rows = cur.execute(
+            "SELECT node_id FROM nodes WHERE file_path = ?", (rel_path,),
+        ).fetchall()
+        node_ids = [r[0] for r in rows]
+
+        if not node_ids:
+            return 0
+
+        # 2. Delete edges referencing these nodes (src OR dst)
+        placeholders = ",".join("?" * len(node_ids))
+        cur.execute(
+            f"DELETE FROM edges WHERE src IN ({placeholders}) OR dst IN ({placeholders})",
+            node_ids + node_ids,
+        )
+        # 3. Delete nodes themselves
+        cur.execute(
+            f"DELETE FROM nodes WHERE node_id IN ({placeholders})",
+            node_ids,
+        )
+        self.conn.commit()
+
+        # 4. Remove from legacy LanceDB table
+        if self.vector_store is not None:
+            try:
+                self.vector_store.delete_by_file_path(rel_path)
+            except Exception as exc:
+                logger.debug("Legacy vector delete for '%s': %s", rel_path, exc)
+
+        # 5. Remove from all per-model LanceDB tables
+        for _key, vs in self._model_vector_stores.items():
+            try:
+                vs.delete_by_file_path(rel_path)
+            except Exception:
+                pass
+
+        # Also try tables that haven't been opened yet
+        if VECTOR_STORE_AVAILABLE:
+            try:
+                probe = VectorStore(self.project_dir, model_key="")
+                for mk in probe.list_model_tables():
+                    if mk and mk not in self._model_vector_stores:
+                        try:
+                            vs = VectorStore(self.project_dir, model_key=mk)
+                            vs.delete_by_file_path(rel_path)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        return len(node_ids)
+
+    def index_single_file(
+        self,
+        file_path: Path,
+        project_root: Path,
+        embedder: Any,
+        model_key: str = "",
+    ) -> int:
+        """Parse and index a single file incrementally.
+
+        Removes old nodes/edges for the file, parses it fresh,
+        embeds the new nodes, and inserts them.
+
+        Args:
+            file_path:    Absolute path to the source file.
+            project_root: Project root (for computing relative paths).
+            embedder:     Object with ``embed_text(str) -> List[float]``.
+            model_key:    Embedding model identifier.
+
+        Returns:
+            Number of nodes indexed for this file.
+        """
+        from .parser import PythonGraphParser
+        from .agents import _build_chunk_text
+
+        rel_path = str(file_path.relative_to(project_root))
+
+        # Remove stale data for this file
+        self.remove_nodes_for_file(rel_path)
+
+        # Parse the single file
+        parser = PythonGraphParser(project_root)
+        try:
+            nodes, edges = parser.parse_file(file_path)
+        except Exception as exc:
+            logger.warning("Failed to parse %s: %s", file_path, exc)
+            return 0
+
+        if not nodes:
+            return 0
+
+        # Embed and insert
+        node_payload = []
+        for node in nodes:
+            text = _build_chunk_text(node)
+            emb = embedder.embed_text(text)
+            node_payload.append((node, emb))
+
+        self.insert_nodes(node_payload, model_key=model_key)
+        self.insert_edges(edges)
+
+        logger.info(
+            "Incremental index: %d nodes, %d edges for %s",
+            len(nodes), len(edges), rel_path,
+        )
+        return len(nodes)
 
     # ------------------------------------------------------------------
     # Read (structured)
@@ -388,3 +541,146 @@ class GraphStore:
             edge_rows,
         )
         self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Per-model vector stores  (auto re-ingestion)
+    # ------------------------------------------------------------------
+
+    def get_vector_store_for_model(self, model_key: str) -> Optional["VectorStore"]:
+        """Get (or create) a LanceDB vector store for a specific embedding model.
+
+        Each embedding model gets its own LanceDB table so that
+        different dimensionalities never collide.  The table is named
+        ``code_nodes_{model_key}``.
+
+        Returns ``None`` when LanceDB is not available.
+        """
+        if not VECTOR_STORE_AVAILABLE:
+            return None
+        if model_key in self._model_vector_stores:
+            return self._model_vector_stores[model_key]
+        try:
+            vs = VectorStore(self.project_dir, model_key=model_key)
+            self._model_vector_stores[model_key] = vs
+            return vs
+        except Exception as exc:
+            logger.warning(
+                "Cannot create vector store for model '%s': %s", model_key, exc,
+            )
+            return None
+
+    def reingest_for_model(
+        self,
+        model_key: str,
+        embedder: Any,
+        chunk_builder: Any = None,
+    ) -> int:
+        """Re-embed all SQLite nodes into a model-specific LanceDB table.
+
+        Reads raw code/metadata from the SQLite ``nodes`` table,
+        computes embeddings with *embedder*, and writes them into the
+        LanceDB table for *model_key*.
+
+        Args:
+            model_key:     Embedding model identifier (e.g. ``"minilm"``).
+            embedder:      Object with an ``embed_text(str) -> List[float]``
+                           method (and optionally ``embed_documents``).
+            chunk_builder: Optional callable ``(dict) -> str`` that builds
+                           the text chunk from a node row dict.  Falls back
+                           to an internal default.
+
+        Returns:
+            Number of nodes ingested.
+        """
+        vs = self.get_vector_store_for_model(model_key)
+        if vs is None:
+            return 0
+
+        rows = self.get_nodes()
+        if not rows:
+            return 0
+
+        if chunk_builder is None:
+            chunk_builder = _default_chunk_builder
+
+        # Clear old data for this model's table and re-open
+        vs.clear()
+        self._model_vector_stores.pop(model_key, None)
+        vs = self.get_vector_store_for_model(model_key)
+        if vs is None:
+            return 0
+
+        node_ids: List[str] = []
+        embeddings: List[List[float]] = []
+        metadatas: List[Dict[str, str]] = []
+        documents: List[str] = []
+        texts: List[str] = []
+
+        for row in rows:
+            row_dict = dict(row)
+            text = chunk_builder(row_dict)
+            texts.append(text)
+            node_ids.append(row_dict["node_id"])
+            metadatas.append({
+                "node_type": row_dict["node_type"],
+                "file_path": row_dict["file_path"],
+                "qualname": row_dict["qualname"],
+                "name": row_dict["name"],
+            })
+            documents.append(row_dict["code"])
+
+        # Batch-embed when possible, single-embed otherwise
+        if hasattr(embedder, "embed_documents"):
+            embeddings = embedder.embed_documents(texts)
+        else:
+            embeddings = [embedder.embed_text(t) for t in texts]
+
+        try:
+            vs.add_nodes(node_ids, embeddings, metadatas, documents)
+            logger.info(
+                "Re-ingested %d nodes into table for embedding model '%s'.",
+                len(node_ids), model_key,
+            )
+        except Exception as exc:
+            logger.warning("Re-ingestion for model '%s' failed: %s", model_key, exc)
+            return 0
+
+        return len(node_ids)
+
+
+# ===================================================================
+# Helpers
+# ===================================================================
+
+# Regex to strip bare import lines from chunk text (mirrors agents._IMPORT_RE)
+_CHUNK_IMPORT_RE = re.compile(r"^(?:from\s+\S+\s+)?import\s+.+$", re.MULTILINE)
+_MAX_CHUNK_CODE = 1500
+
+
+def _default_chunk_builder(row: Dict[str, Any]) -> str:
+    """Build embedding text from a SQLite node row dict.
+
+    Mirrors :func:`codegraph_cli.agents._build_chunk_text` but works
+    with plain dicts instead of :class:`Node` objects.
+    """
+    parts: List[str] = [
+        f"file: {row['file_path']}",
+        f"symbol: {row['qualname']}",
+        f"type: {row['node_type']}",
+    ]
+    docstring = row.get("docstring") or ""
+    if docstring.strip():
+        parts.append(f"doc: {docstring.strip()}")
+
+    code: str = row.get("code", "")
+    if row["node_type"] != "module":
+        code = _CHUNK_IMPORT_RE.sub("", code).strip()
+    else:
+        code = code[:_MAX_CHUNK_CODE]
+
+    if len(code) > _MAX_CHUNK_CODE:
+        code = code[:_MAX_CHUNK_CODE] + "\n# ... (truncated)"
+    if code:
+        parts.append(code)
+
+    return "\n".join(parts)

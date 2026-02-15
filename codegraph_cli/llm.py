@@ -51,7 +51,7 @@ class OllamaProvider(LLMProvider):
 
 
 class GroqProvider(LLMProvider):
-    """Groq cloud API provider using curl (workaround for Python urllib timeout)."""
+    """Groq cloud API provider."""
     
     def __init__(self, model: str, api_key: str):
         self.model = model
@@ -63,36 +63,24 @@ class GroqProvider(LLMProvider):
             return None
         
         try:
-            import subprocess
-            import tempfile
+            import requests
             
-            # Create JSON payload
-            payload = json.dumps({
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-                "max_tokens": 1024,
-            })
-            
-            # Use curl (which works!) instead of Python HTTP libraries
-            result = subprocess.run(
-                [
-                    "curl", "-s", "-X", "POST",
-                    self.endpoint,
-                    "-H", "Content-Type: application/json",
-                    "-H", f"Authorization: Bearer {self.api_key}",
-                    "-d", payload,
-                    "--max-time", "15"
-                ],
-                capture_output=True,
-                text=True,
-                timeout=20
+            response = requests.post(
+                self.endpoint,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                json={
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 1024,
+                },
+                timeout=20,
             )
-            
-            if result.returncode == 0 and result.stdout:
-                response = json.loads(result.stdout)
-                return response["choices"][0]["message"]["content"]
-            return None
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"]
         except Exception:
             return None
 
@@ -372,33 +360,24 @@ class LocalLLM:
     
     def _chat_groq(self, messages: List[Dict], max_tokens: int, temperature: float) -> Optional[str]:
         """Chat completion for Groq."""
-        import subprocess
+        import requests
         
-        payload = json.dumps({
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        })
-        
-        result = subprocess.run(
-            [
-                "curl", "-s", "-X", "POST",
-                self.provider.endpoint,
-                "-H", "Content-Type: application/json",
-                "-H", f"Authorization: Bearer {self.api_key}",
-                "-d", payload,
-                "--max-time", "30"
-            ],
-            capture_output=True,
-            text=True,
-            timeout=35
+        response = requests.post(
+            self.provider.endpoint,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            json={
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            },
+            timeout=35,
         )
-        
-        if result.returncode == 0 and result.stdout:
-            response = json.loads(result.stdout)
-            return response["choices"][0]["message"]["content"]
-        return None
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
     
     def _chat_openai(self, messages: List[Dict], max_tokens: int, temperature: float) -> Optional[str]:
         """Chat completion for OpenAI."""
@@ -578,6 +557,7 @@ def create_crewai_llm(local_llm: LocalLLM):
         return LLM(
             model=f"ollama/{local_llm.model}",
             base_url=base_url,
+            max_tokens=4096,
         )
     
     elif provider == "groq":
@@ -585,6 +565,7 @@ def create_crewai_llm(local_llm: LocalLLM):
         return LLM(
             model=f"groq/{local_llm.model}",
             api_key=local_llm.api_key,
+            max_tokens=4096,
         )
     
     elif provider == "openai":
@@ -595,25 +576,29 @@ def create_crewai_llm(local_llm: LocalLLM):
             return LLM(
                 model=f"openrouter/{local_llm.model}",
                 api_key=local_llm.api_key,
+                max_tokens=4096,
             )
         elif local_llm.endpoint and local_llm.endpoint != "https://api.openai.com/v1/chat/completions":
             # Other custom endpoint - use base_url
             return LLM(
                 model=local_llm.model,
                 api_key=local_llm.api_key,
-                base_url=local_llm.endpoint.replace("/chat/completions", "")
+                base_url=local_llm.endpoint.replace("/chat/completions", ""),
+                max_tokens=4096,
             )
         else:
             # Standard OpenAI
             return LLM(
                 model=f"openai/{local_llm.model}",
                 api_key=local_llm.api_key,
+                max_tokens=4096,
             )
     
     elif provider == "anthropic":
         return LLM(
             model=f"anthropic/{local_llm.model}",
             api_key=local_llm.api_key,
+            max_tokens=4096,
         )
     
     elif provider == "gemini":
@@ -621,6 +606,7 @@ def create_crewai_llm(local_llm: LocalLLM):
         return LLM(
             model=f"gemini/{local_llm.model}",
             api_key=local_llm.api_key,
+            max_tokens=4096,
         )
     
     elif provider == "openrouter":
@@ -628,6 +614,7 @@ def create_crewai_llm(local_llm: LocalLLM):
         return LLM(
             model=f"openrouter/{local_llm.model}",
             api_key=local_llm.api_key,
+            max_tokens=4096,
         )
     
     else:

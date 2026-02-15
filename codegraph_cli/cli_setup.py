@@ -305,10 +305,10 @@ def set_llm(
     """Quickly switch LLM provider without full setup wizard.
     
     Examples:
-        cg set-llm groq -k YOUR_API_KEY
-        cg set-llm gemini -k YOUR_API_KEY -m gemini-2.0-flash
-        cg set-llm openrouter -k YOUR_API_KEY -m google/gemini-2.0-flash-exp:free
-        cg set-llm ollama -m qwen2.5-coder:7b
+        cg config set-llm groq -k YOUR_API_KEY
+        cg config set-llm gemini -k YOUR_API_KEY -m gemini-2.0-flash
+        cg config set-llm openrouter -k YOUR_API_KEY -m google/gemini-2.0-flash-exp:free
+        cg config set-llm ollama -m qwen2.5-coder:7b
     """
     provider = provider.lower().strip()
     
@@ -467,9 +467,9 @@ def show_llm():
     typer.echo("")
     typer.echo(typer.style("  Quick Commands", bold=True))
     typer.echo(typer.style("  ─────────────────────────────────────────", dim=True))
-    typer.echo(f"  {typer.style('cg setup', fg=typer.colors.YELLOW)}              Full interactive wizard")
-    typer.echo(f"  {typer.style('cg set-llm <name>', fg=typer.colors.YELLOW)}     Quick switch provider")
-    typer.echo(f"  {typer.style('cg unset-llm', fg=typer.colors.YELLOW)}          Reset / clear config")
+    typer.echo(f"  {typer.style('cg config setup', fg=typer.colors.YELLOW)}              Full interactive wizard")
+    typer.echo(f"  {typer.style('cg config set-llm <name>', fg=typer.colors.YELLOW)}     Quick switch provider")
+    typer.echo(f"  {typer.style('cg config unset-llm', fg=typer.colors.YELLOW)}          Reset / clear config")
     typer.echo("")
 
 
@@ -550,9 +550,9 @@ def set_embedding(
         qodo-1.5b   ~6.2 GB   Best quality, code-optimized
 
     Examples:
-        cg set-embedding minilm
-        cg set-embedding jina-code
-        cg set-embedding hash
+        cg config set-embedding minilm
+        cg config set-embedding jina-code
+        cg config set-embedding hash
     """
     model = model.lower().strip()
 
@@ -619,8 +619,8 @@ def show_embedding():
     typer.echo("")
     typer.echo(typer.style("  Quick Commands", bold=True))
     typer.echo(typer.style("  ─────────────────────────────────────────", dim=True))
-    typer.echo(f"  {typer.style('cg set-embedding <model>', fg=typer.colors.YELLOW)}   Switch model")
-    typer.echo(f"  {typer.style('cg unset-embedding', fg=typer.colors.YELLOW)}         Reset to hash")
+    typer.echo(f"  {typer.style('cg config set-embedding <model>', fg=typer.colors.YELLOW)}   Switch model")
+    typer.echo(f"  {typer.style('cg config unset-embedding', fg=typer.colors.YELLOW)}         Reset to hash")
     typer.echo("")
 
 
