@@ -829,9 +829,15 @@ function explorer() {
 
 def _create_server(store: Any, llm_provider: str, llm_model: str, llm_api_key: str):
     """Create the Starlette ASGI application."""
-    from starlette.applications import Starlette
-    from starlette.responses import HTMLResponse, JSONResponse
-    from starlette.routing import Route
+    try:
+        from starlette.applications import Starlette
+        from starlette.responses import HTMLResponse, JSONResponse
+        from starlette.routing import Route
+    except ImportError:
+        raise ImportError(
+            "The 'explore' feature requires starlette and uvicorn.\n"
+            "Install with: pip install codegraph-cli[explore]"
+        )
 
     async def homepage(request):
         return HTMLResponse(HTML_TEMPLATE)
@@ -1033,6 +1039,12 @@ def explore_open(
 
     try:
         import uvicorn
+    except ImportError:
+        raise ImportError(
+            "The 'explore' feature requires uvicorn.\n"
+            "Install with: pip install codegraph-cli[explore]"
+        )
+    try:
         uvicorn.run(server_app, host="127.0.0.1", port=actual_port, log_level="warning")
     except KeyboardInterrupt:
         pass

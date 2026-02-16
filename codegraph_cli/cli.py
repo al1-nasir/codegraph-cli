@@ -16,6 +16,7 @@ from .cli_explore import explore_app
 from .cli_export import export_app
 from .cli_groups import analyze_grp, config_grp, project_grp
 from .cli_health import health_app
+from .cli_onboard import onboard
 from .cli_quickstart import quickstart_app
 from .cli_setup import setup as setup_wizard, set_llm, unset_llm, show_llm
 from .cli_setup import set_embedding, unset_embedding, show_embedding
@@ -41,6 +42,9 @@ app.add_typer(analyze_grp, name="analyze", help="Code analysis")
 app.add_typer(chat_app, name="chat", help="Interactive chat with AI agents")
 app.add_typer(explore_app, name="explore", help="Visual code explorer in browser")
 app.add_typer(export_app, name="export", help="Export project documentation")
+
+# Top-level standalone commands
+app.command("onboard")(onboard)
 
 
 def version_callback(value: bool):

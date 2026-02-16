@@ -243,7 +243,7 @@ class VectorStore:
         if self._table is None:
             return None
         try:
-            import pandas as pd  # type: ignore[import-untyped]
+            import pandas as pd  # type: ignore[import-untyped]  # noqa: F811
             df: pd.DataFrame = self._table.to_pandas()
             match = df[df["id"] == node_id]
             if match.empty:

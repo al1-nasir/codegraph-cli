@@ -18,7 +18,23 @@ except ImportError:
         def __init_subclass__(cls, **kwargs): pass
         def __init__(self, **kwargs): pass
     CREWAI_AVAILABLE = False
-from pydantic import BaseModel, Field, PrivateAttr
+
+try:
+    from pydantic import BaseModel, Field, PrivateAttr
+except ImportError:
+    from dataclasses import dataclass, field as _field
+
+    class BaseModel:  # type: ignore
+        def __init_subclass__(cls, **kwargs): pass
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+    def Field(*args, **kwargs):  # type: ignore
+        return kwargs.get("default", None)
+
+    def PrivateAttr(*args, **kwargs):  # type: ignore
+        return kwargs.get("default", None)
 
 if TYPE_CHECKING:
     from .project_context import ProjectContext
