@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org)
-[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/al1-nasir/codegraph-cli)
+[![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)](https://github.com/al1-nasir/codegraph-cli)
 [![CI](https://github.com/al1-nasir/codegraph-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/al1-nasir/codegraph-cli/actions/workflows/ci.yml)
 
 ---
@@ -18,8 +18,11 @@ Core capabilities:
 - **Semantic Search** — find code by meaning, not string matching
 - **Impact Analysis** — trace multi-hop dependencies before making changes
 - **Graph Visualization** — interactive HTML and Graphviz DOT exports
+- **Browser-Based Explorer** — visual code navigation with Mermaid diagrams and AI explanations
 - **Conversational Chat** — natural language coding sessions with RAG context
 - **Multi-Agent System** — CrewAI-powered agents for code generation, refactoring, and analysis
+- **DOCX Export** — generate professional project documentation with architecture diagrams
+- **Auto Onboarding** — AI-generated README from your code graph
 - **File Rollback** — automatic backups before every file modification
 
 ---
@@ -77,7 +80,7 @@ cg config set-llm ollama
 ### 2. Index a project
 
 ```bash
-cg index /path/to/project --name myproject
+cg project index /path/to/project --name myproject
 ```
 
 This parses the source tree using tree-sitter, builds a dependency graph in SQLite, and generates embeddings for semantic search.
@@ -85,11 +88,14 @@ This parses the source tree using tree-sitter, builds a dependency graph in SQLi
 ### 3. Use it
 
 ```bash
-cg search "authentication logic"
-cg impact UserService --hops 3
-cg graph process_payment --depth 2
+cg analyze search "authentication logic"
+cg analyze impact UserService --hops 3
+cg analyze graph process_payment --depth 2
 cg chat start
-cg chat start --crew    # multi-agent mode
+cg chat start --crew       # multi-agent mode
+cg explore open            # browser-based code explorer
+cg onboard                 # auto-generate project README
+cg export docx             # export documentation to DOCX
 ```
 
 ---
@@ -144,44 +150,68 @@ cg index /path/to/project
 
 ## Commands
 
-### Project Management
+CodeGraph CLI organizes commands into logical groups:
 
-```bash
-cg index <path> [--name NAME]       # parse and index a codebase
-cg list-projects                     # list all indexed projects
-cg load-project <name>               # switch active project
-cg current-project                   # print active project name
-cg delete-project <name>             # remove a project index
-cg merge-projects <src> <dst>        # merge two project graphs
-cg unload-project                    # unload without deleting
+```
+cg config    — LLM, embedding, and setup configuration
+cg project   — Index, load, and manage project memories
+cg analyze   — Search, impact, graph, and RAG context
+cg chat      — Interactive chat with AI agents
+cg explore   — Visual code explorer in browser
+cg export    — Export project documentation
+cg onboard   — Auto-generate project README
 ```
 
-### Search and Analysis
+### Configuration (`cg config`)
 
 ```bash
-cg search <query> [--top-k N]       # semantic search across the graph
-cg impact <symbol> [--hops N]       # multi-hop dependency impact analysis
-cg graph <symbol> [--depth N]       # ASCII dependency graph
-cg rag-context <query> [--top-k N]  # raw RAG retrieval for debugging
+cg config setup                      # interactive LLM setup wizard
+cg config set-llm openrouter         # switch LLM provider
+cg config unset-llm                  # reset LLM config to defaults
+cg config show-llm                   # show current LLM settings
+cg config set-embedding jina-code    # switch embedding model
+cg config unset-embedding            # reset to hash default
+cg config show-embedding             # show current embedding model
 ```
 
-### Graph Export
+### Project Management (`cg project`)
 
 ```bash
-cg export-graph --format html        # interactive vis.js visualization
-cg export-graph --format dot         # Graphviz DOT format
-cg export-graph MyClass -f html -o out.html  # focused subgraph
+cg project index <path> [--name NAME]  # parse and index a codebase
+cg project list                        # list all indexed projects
+cg project load <name>                 # switch active project
+cg project current                     # print active project name
+cg project delete <name>               # remove a project index
+cg project merge <src> <dst>           # merge two project graphs
+cg project unload                      # unload without deleting
+cg project init                        # quickstart wizard
+cg project watch                       # auto-reindex on file changes
 ```
 
-### Interactive Chat
+### Code Analysis (`cg analyze`)
 
 ```bash
-cg chat start                        # start or resume a session
-cg chat start --new                  # force a new session
-cg chat start --crew                 # multi-agent mode (CrewAI)
-cg chat start -s <id>                # resume a specific session
-cg chat list                         # list all sessions
-cg chat delete <id>                  # delete a session
+cg analyze search <query> [--top-k N]  # semantic search across the graph
+cg analyze impact <symbol> [--hops N]  # multi-hop dependency impact analysis
+cg analyze graph <symbol> [--depth N]  # ASCII dependency graph
+cg analyze export-graph --format html  # interactive vis.js visualization
+cg analyze export-graph --format dot   # Graphviz DOT format
+cg analyze rag-context <query>         # raw RAG retrieval for debugging
+cg analyze tree [--full]               # directory tree of indexed project
+cg analyze sync [--dry-run]            # incremental index sync
+cg analyze health                      # project health dashboard
+```
+
+### Interactive Chat (`cg chat`)
+
+```bash
+cg chat start                          # start or resume a session
+cg chat start --new                    # force a new session
+cg chat start --crew                   # multi-agent mode (CrewAI)
+cg chat start -s <id>                  # resume a specific session
+cg chat list                           # list all sessions
+cg chat delete <id>                    # delete a session
+cg chat export <id> --format markdown  # export session to file
 ```
 
 In-chat commands:
@@ -198,18 +228,31 @@ In-chat commands:
 | `/rollback <file>` | Crew | Restore a file from backup |
 | `/undo <file>` | Crew | Alias for rollback |
 
-### Code Generation (v2)
+### Visual Explorer (`cg explore`)
 
 ```bash
-cg v2 generate "add a REST endpoint for user deletion"
-cg v2 review src/auth.py --check-security
-cg v2 refactor rename-symbol OldName NewName
-cg v2 refactor extract-function target_fn 45 60
-cg v2 test unit process_payment
-cg v2 diagnose check src/
-cg v2 diagnose fix src/auth.py
-cg v2 rollback <file>
-cg v2 list-backups
+cg explore open                        # launch browser-based code explorer
+cg explore open --port 9000            # use custom port
+```
+
+Opens a local web UI with directory tree navigation, syntax-highlighted code, AI explanations, dependency graphs, and Mermaid diagrams.
+
+### Documentation Export (`cg export`)
+
+```bash
+cg export docx                         # basic DOCX with structure + diagrams
+cg export docx --enhanced              # add AI-powered explanations
+cg export docx --include-code          # include source code listings
+cg export docx --enhanced --depth files --include-code  # full export
+```
+
+### Auto Onboarding
+
+```bash
+cg onboard                             # print AI-generated README to stdout
+cg onboard --save                      # save as ONBOARD.md in project dir
+cg onboard -o README.md                # save to specific file
+cg onboard --no-llm                    # template-only, no LLM call
 ```
 
 ---
@@ -232,23 +275,31 @@ Every file modification automatically creates a timestamped backup in `~/.codegr
 ## Architecture
 
 ```
-CLI Layer (Typer)
+CLI Layer (Typer + Rich)
     |
-    +-- MCPOrchestrator ----------> GraphStore (SQLite)
-    |       |                           |
-    |       +-- Parser (tree-sitter)    +-- VectorStore (LanceDB)
-    |       +-- RAGRetriever            |
-    |       +-- LLM Adapter             +-- Embeddings (configurable)
-    |                                       hash | minilm | bge-base
-    |                                       jina-code | qodo-1.5b
-    +-- ChatAgent (standard mode)
+    +-- config ─────────> ConfigManager (TOML)
     |
-    +-- CrewChatAgent (--crew mode)
-            |
-            +-- Coordinator Agent
-            +-- File System Agent -----> 8 file operation tools
-            +-- Code Gen Agent --------> all 11 tools
-            +-- Code Analysis Agent ---> 3 search/analysis tools
+    +-- project ────────> MCPOrchestrator ──> GraphStore (SQLite)
+    |                         |                    |
+    |                         +-- Parser           +-- VectorStore (LanceDB)
+    |                         |   (tree-sitter)    |
+    |                         +-- RAGRetriever     +-- Embeddings (configurable)
+    |                         +-- LLM Adapter          hash | minilm | bge-base
+    |                                                  jina-code | qodo-1.5b
+    +-- analyze ────────> Search, Impact, Graph, Tree, Sync, Health
+    |
+    +-- chat ───────────> ChatAgent (standard mode)
+    |                     CrewChatAgent (--crew mode)
+    |                         +-- Coordinator Agent
+    |                         +-- File System Agent ──> 8 file operation tools
+    |                         +-- Code Gen Agent ─────> all 11 tools
+    |                         +-- Code Analysis Agent > 3 search/analysis tools
+    |
+    +-- explore ────────> Starlette + Uvicorn (browser UI)
+    |
+    +-- export ─────────> DOCX generator + Mermaid diagrams
+    |
+    +-- onboard ────────> AI README generation from code graph
 ```
 
 **Embeddings**: Five models available via `cg config set-embedding`. Hash (default, zero-dependency) through Qodo-Embed-1-1.5B (best quality, 6 GB). Neural models use raw `transformers` + `torch` — no sentence-transformers overhead. Models are cached in `~/.codegraph/models/`.
@@ -265,20 +316,26 @@ CLI Layer (Typer)
 
 ```
 codegraph_cli/
-    cli.py               # main Typer application, all top-level commands
-    cli_chat.py           # interactive chat REPL with styled output
-    cli_setup.py          # setup wizard, set-llm, unset-llm, set-embedding
-    cli_v2.py             # v2 code generation commands
+    cli.py               # main Typer application, command wiring
+    cli_groups.py         # command group definitions (config, project, analyze)
+    cli_chat.py           # interactive chat REPL with Rich output
+    cli_setup.py          # setup wizard, set-llm, set-embedding
+    cli_explore.py        # browser-based visual code explorer (Starlette)
+    cli_export.py         # DOCX export with Mermaid diagrams
+    cli_onboard.py        # AI-generated project README
+    cli_health.py         # project health dashboard
+    cli_quickstart.py     # quickstart / init wizard
+    cli_watch.py          # auto-reindex on file changes
     config.py             # loads config from TOML
     config_manager.py     # TOML read/write, provider and embedding config
     llm.py                # multi-provider LLM adapter
-    parser.py             # tree-sitter AST parsing
+    parser.py             # tree-sitter AST parsing (Python, JS, TS)
     storage.py            # SQLite graph store
     embeddings.py         # configurable embedding engine (5 models)
     rag.py                # RAG retriever
     vector_store.py       # LanceDB vector store
     orchestrator.py       # coordinates parsing, search, impact
-    graph_export.py       # DOT and HTML export
+    graph_export.py       # DOT and HTML graph export
     project_context.py    # unified file access layer
     crew_tools.py         # 11 CrewAI tools (file ops + analysis)
     crew_agents.py        # 4 specialized CrewAI agents
@@ -286,7 +343,6 @@ codegraph_cli/
     chat_agent.py         # standard chat agent
     chat_session.py       # session persistence
     models.py             # core data models
-    models_v2.py          # v2 models (ChatSession, CodeProposal)
     templates/
         graph_interactive.html  # vis.js graph template
 ```
