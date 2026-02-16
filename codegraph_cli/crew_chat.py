@@ -45,10 +45,20 @@ class CrewChatAgent:
         # ── Silence CrewAI / LiteLLM noise ────────────────
         for logger_name in (
             "crewai", "crewai.agents", "crewai.crews",
-            "crewai.tasks", "litellm", "httpx",
+            "crewai.tasks", "litellm", "litellm.proxy",
+            "litellm.litellm_core_utils", "litellm.utils",
+            "litellm.proxy.proxy_server", "httpx", "httpcore",
         ):
             logging.getLogger(logger_name).setLevel(logging.CRITICAL)
         os.environ.setdefault("CREWAI_TELEMETRY_OPT_OUT", "true")
+        # Suppress LiteLLM's fastapi proxy import spam
+        os.environ.setdefault("LITELLM_LOG", "ERROR")
+        try:
+            import litellm
+            litellm.suppress_debug_info = True
+            litellm.set_verbose = False
+        except ImportError:
+            pass
 
         # ── Provider env vars for LiteLLM compatibility ───
         if llm.api_key:
@@ -210,8 +220,8 @@ class CrewChatAgent:
         """Format conversation history for injection into task context.
 
         Keeps the last 4 exchanges (8 messages).  The most recent 2
-        exchanges are preserved in full; older ones are compressed to
-        ~800 chars each to stay within LLM context limits.
+        exchanges are preserved in full (up to a cap); older ones are
+        compressed to ~400 chars each to stay within LLM context limits.
         """
         if not self._history:
             return ""
@@ -226,7 +236,7 @@ class CrewChatAgent:
             content = msg["content"]
             # Last 2 exchanges (4 msgs) get generous space; older ones compressed
             is_recent = i >= total - 4
-            max_len = 3000 if is_recent else 800
+            max_len = 1500 if is_recent else 400
             if len(content) > max_len:
                 content = content[:max_len] + "\n... (truncated)"
             lines.append(f"[{role}]:\n{content}")

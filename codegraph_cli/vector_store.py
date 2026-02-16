@@ -94,8 +94,9 @@ class VectorStore:
         if not node_ids:
             return
 
-        rows = [
-            {
+        rows = []
+        for nid, emb, meta, doc in zip(node_ids, embeddings, metadatas, documents):
+            row = {
                 "id": nid,
                 "vector": emb,
                 "document": doc,
@@ -104,8 +105,11 @@ class VectorStore:
                 "qualname": meta.get("qualname", ""),
                 "name": meta.get("name", ""),
             }
-            for nid, emb, meta, doc in zip(node_ids, embeddings, metadatas, documents)
-        ]
+            # Store any extra metadata keys beyond the standard four
+            for k, v in meta.items():
+                if k not in ("node_type", "file_path", "qualname", "name"):
+                    row[k] = str(v)
+            rows.append(row)
 
         if self._table is None:
             # First insert – create the table (schema inferred from data)
@@ -243,21 +247,19 @@ class VectorStore:
         if self._table is None:
             return None
         try:
-            import pandas as pd  # type: ignore[import-untyped]  # noqa: F811
-            df: pd.DataFrame = self._table.to_pandas()
-            match = df[df["id"] == node_id]
-            if match.empty:
+            results = self._table.search().where(f'id = "{node_id}"').limit(1).to_list()
+            if not results:
                 return None
-            row = match.iloc[0].to_dict()
+            row = results[0]
+            # Build metadata from all columns except internal/reserved ones
+            reserved = {"id", "vector", "document", "_distance", "_rowid"}
+            metadata = {
+                k: v for k, v in row.items() if k not in reserved and v is not None
+            }
             return {
                 "id": row["id"],
                 "embedding": row.get("vector"),
-                "metadata": {
-                    "node_type": row.get("node_type", ""),
-                    "file_path": row.get("file_path", ""),
-                    "qualname": row.get("qualname", ""),
-                    "name": row.get("name", ""),
-                },
+                "metadata": metadata,
                 "document": row.get("document", ""),
             }
         except Exception:

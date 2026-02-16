@@ -152,9 +152,34 @@ data = json.loads(file_content)  # Safer alternative"""
         return issue
 
     def _detect_sql_injection(self, tree: ast.AST, node: Dict) -> List[Dict]:
-        """Detect SQL injection vulnerabilities."""
+        """Detect SQL injection vulnerabilities.
+
+        Catches both direct concatenation in execute() args **and** indirect
+        patterns where a variable is assigned a concatenated/formatted string
+        and then passed to execute().
+        """
         issues = []
 
+        # ── Phase 1: collect tainted variable names ───────────────────
+        # A variable is "tainted" when its value comes from string
+        # concatenation, f-string interpolation, or .format().
+        tainted_vars: set[str] = set()
+        for ast_node in ast.walk(tree):
+            if isinstance(ast_node, ast.Assign):
+                val = ast_node.value
+                is_tainted = (
+                    (isinstance(val, ast.BinOp) and isinstance(val.op, ast.Add))
+                    or isinstance(val, ast.JoinedStr)
+                    or (isinstance(val, ast.Call)
+                        and isinstance(val.func, ast.Attribute)
+                        and val.func.attr == "format")
+                )
+                if is_tainted:
+                    for target in ast_node.targets:
+                        if isinstance(target, ast.Name):
+                            tainted_vars.add(target.id)
+
+        # ── Phase 2: inspect .execute() / .executemany() / .raw() ────
         for ast_node in ast.walk(tree):
             # Look for string formatting in SQL-like strings
             if isinstance(ast_node, ast.Call):
@@ -197,6 +222,19 @@ data = json.loads(file_content)  # Safer alternative"""
                                         "suggestion": "Use parameterized queries with placeholders",
                                         "code_snippet": ast.unparse(ast_node)[:100]
                                     })
+
+                            # Check for indirect: variable previously assigned
+                            # from concatenation / f-string / .format()
+                            elif (isinstance(arg, ast.Name)
+                                  and arg.id in tainted_vars):
+                                issues.append({
+                                    "type": "sql_injection",
+                                    "severity": "critical",
+                                    "line": node["start_line"] + ast_node.lineno - 1,
+                                    "message": "Potential SQL injection via tainted variable",
+                                    "suggestion": "Use parameterized queries with placeholders (?)",
+                                    "code_snippet": ast.unparse(ast_node)[:100]
+                                })
 
         return issues
 

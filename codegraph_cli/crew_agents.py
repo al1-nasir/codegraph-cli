@@ -36,7 +36,7 @@ def create_file_ops_agent(tools: list, llm, project_context: str = "") -> Agent:
         llm=llm,
         verbose=False,
         allow_delegation=False,
-        max_iter=15,
+        max_iter=10,
         max_tokens=4096,
     )
 
@@ -69,7 +69,7 @@ def create_code_gen_agent(tools: list, llm, project_context: str = "") -> Agent:
         llm=llm,
         verbose=False,
         allow_delegation=False,
-        max_iter=20,
+        max_iter=12,
         max_tokens=4096,
     )
 
@@ -98,7 +98,7 @@ def create_code_analysis_agent(tools: list, llm, project_context: str = "") -> A
         llm=llm,
         verbose=False,
         allow_delegation=False,
-        max_iter=15,
+        max_iter=10,
         max_tokens=4096,
     )
 
@@ -142,6 +142,6 @@ def create_coordinator_agent(llm, project_context: str = "", tools: list = None)
         llm=llm,
         verbose=False,
         allow_delegation=True,
-        max_iter=25,
+        max_iter=15,
         max_tokens=4096,
     )

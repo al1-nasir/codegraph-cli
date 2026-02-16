@@ -92,7 +92,7 @@ class TestSearchCommand:
         result = runner.invoke(app, ["analyze", "search", "test"])
         
         assert result.exit_code != 0
-        assert "No project loaded" in result.stdout
+        assert "No project loaded" in result.output
 
 
 class TestImpactCommand:

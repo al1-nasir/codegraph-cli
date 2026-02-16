@@ -1,14 +1,29 @@
 """Tests for multi-agent components."""
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from codegraph_cli.agents import GraphAgent, RAGAgent, SummarizationAgent
 from codegraph_cli.embeddings import HashEmbeddingModel
-from codegraph_cli.llm import LocalLLM
 from codegraph_cli.rag import RAGRetriever
 from codegraph_cli.storage import GraphStore
+
+
+def _make_mock_llm() -> MagicMock:
+    """Create a mock LocalLLM that returns canned responses without network."""
+    llm = MagicMock()
+    llm.explain.return_value = (
+        "Main risks:\n- Changing this function may break downstream callers\n"
+        "Most likely breakpoints:\n- Signature changes\n"
+        "Test recommendations:\n- Add unit tests"
+    )
+    llm.provider_name = "mock"
+    llm.model = "mock-model"
+    llm.api_key = None
+    llm.endpoint = None
+    return llm
 
 
 class TestGraphAgent:
@@ -88,7 +103,7 @@ class TestSummarizationAgent:
     
     def test_impact_analysis(self, indexed_sample_store: GraphStore):
         """Test impact analysis."""
-        llm = LocalLLM()
+        llm = _make_mock_llm()
         agent = SummarizationAgent(indexed_sample_store, llm)
         
         report = agent.impact_analysis("processor.OrderProcessor.create_order", hops=2)
@@ -100,7 +115,7 @@ class TestSummarizationAgent:
     
     def test_impact_analysis_not_found(self, temp_graph_store: GraphStore):
         """Test impact analysis for non-existent symbol."""
-        llm = LocalLLM()
+        llm = _make_mock_llm()
         agent = SummarizationAgent(temp_graph_store, llm)
         
         report = agent.impact_analysis("NonExistent", hops=2)
@@ -110,7 +125,7 @@ class TestSummarizationAgent:
     
     def test_impact_analysis_multi_hop(self, indexed_sample_store: GraphStore):
         """Test multi-hop impact analysis."""
-        llm = LocalLLM()
+        llm = _make_mock_llm()
         agent = SummarizationAgent(indexed_sample_store, llm)
         
         # Test with different hop counts
@@ -140,7 +155,7 @@ class TestAgentIntegration:
         assert len(results) > 0
         
         # 3. Analyze impact
-        llm = LocalLLM()
+        llm = _make_mock_llm()
         summ_agent = SummarizationAgent(temp_graph_store, llm)
         report = summ_agent.impact_analysis("processor.OrderProcessor", hops=2)
         assert len(report.impacted) > 0

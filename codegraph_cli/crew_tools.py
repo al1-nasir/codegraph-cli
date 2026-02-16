@@ -208,7 +208,12 @@ class ReadFileTool(ContextTool):
             numbered = []
             for i, line in enumerate(content.split("\n"), 1):
                 numbered.append(f"{i:4d} │ {line}")
-            return f"── {path} ──\n" + "\n".join(numbered)
+            result = f"── {path} ──\n" + "\n".join(numbered)
+            # Truncate to avoid blowing up LLM context window
+            max_chars = 12_000
+            if len(result) > max_chars:
+                result = result[:max_chars] + f"\n... (truncated — file has {len(content)} chars total, use grep_in_project to find specific sections)"
+            return result
         except Exception as e:
             return f"Error reading file: {e}"
 
@@ -354,16 +359,18 @@ class SearchCodeTool(BaseTool):
 
     def _run(self, query: str) -> str:
         try:
-            results = self._rag.search(query, top_k=8)
+            results = self._rag.search(query, top_k=5)
             if not results:
                 return f"No results found for: {query}"
             lines = [f"Found {len(results)} results for '{query}':\n"]
             for i, r in enumerate(results, 1):
+                # Truncate preview to keep context compact
+                preview = r.snippet[:200].replace("\n", " ")
                 lines.append(
                     f"{i}. [{r.node_type}] {r.qualname}\n"
                     f"   File: {r.file_path}:{r.start_line}-{r.end_line}\n"
                     f"   Score: {r.score:.2f}\n"
-                    f"   Preview: {r.snippet[:120]}…\n"
+                    f"   Preview: {preview}…\n"
                 )
             return "\n".join(lines)
         except Exception as e:
