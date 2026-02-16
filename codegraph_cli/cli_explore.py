@@ -1016,12 +1016,18 @@ def explore_open(
         store.close()
         raise typer.Exit(code=1)
 
-    server_app = _create_server(
-        store,
-        llm_provider=cfg.LLM_PROVIDER,
-        llm_model=cfg.LLM_MODEL,
-        llm_api_key=cfg.LLM_API_KEY,
-    )
+    try:
+        server_app = _create_server(
+            store,
+            llm_provider=cfg.LLM_PROVIDER,
+            llm_model=cfg.LLM_MODEL,
+            llm_api_key=cfg.LLM_API_KEY,
+        )
+    except ImportError:
+        console.print("[red]The 'explore' feature requires starlette and uvicorn.[/red]")
+        console.print("[dim]Install with: pip install codegraph-cli\\[explore][/dim]")
+        store.close()
+        raise typer.Exit(code=1)
 
     url = f"http://127.0.0.1:{actual_port}"
     console.print(f"\n[bold green]🌐 CodeGraph Explorer[/bold green]")
@@ -1040,10 +1046,10 @@ def explore_open(
     try:
         import uvicorn
     except ImportError:
-        raise ImportError(
-            "The 'explore' feature requires uvicorn.\n"
-            "Install with: pip install codegraph-cli[explore]"
-        )
+        console.print("[red]The 'explore' feature requires uvicorn.[/red]")
+        console.print("[dim]Install with: pip install codegraph-cli\\[explore][/dim]")
+        store.close()
+        raise typer.Exit(code=1)
     try:
         uvicorn.run(server_app, host="127.0.0.1", port=actual_port, log_level="warning")
     except KeyboardInterrupt:

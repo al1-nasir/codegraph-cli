@@ -5,6 +5,17 @@ All notable changes to CodeGraph CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] - 2025-07-22
+
+### Fixed
+- `cg explore open` no longer shows raw Python tracebacks when starlette/uvicorn are not installed — now prints a clean error with install instructions
+- Comprehensive dependency audit confirmed all imports are correctly declared or guarded
+
+### Verified
+- Clean `pip install codegraph-cli` works in fresh venvs (base, [crew], [all])
+- All 48 modules import successfully after install
+- Python 3.9 compatibility confirmed (all modern syntax guarded by `__future__` imports)
+
 ## [2.1.1] - 2026-02-16
 
 ### Fixed
